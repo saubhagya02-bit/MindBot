@@ -1,1 +1,117 @@
 @import "tailwindcss";
+
+/* BASE STYLES */
+@layer base {
+  html {
+    @apply bg-slate-950 text-slate-100;
+    scrollbar-width: thin;
+    scrollbar-color: #2e3452 transparent;
+  }
+
+  ::-webkit-scrollbar {
+    width: 4px;
+    height: 4px;
+  }
+
+  ::-webkit-scrollbar-track {
+    background: transparent;
+  }
+
+  ::-webkit-scrollbar-thumb {
+    background: #2e3452;
+    border-radius: 4px;
+  }
+
+  * {
+    box-sizing: border-box;
+  }
+}
+
+/* COMPONENTS */
+@layer components {
+  .sidebar-item {
+    @apply flex items-center gap-2.5 px-3 py-2 rounded-lg text-slate-400 text-sm cursor-pointer transition hover:bg-slate-800 hover:text-slate-100;
+  }
+
+  .sidebar-item.active {
+    @apply bg-slate-800 text-slate-100;
+  }
+
+  .btn-primary {
+    @apply bg-blue-500 hover:bg-blue-600 text-white px-4 py-2 rounded-lg text-sm font-medium transition active:scale-95;
+  }
+
+  .btn-ghost {
+    @apply border border-slate-700 text-slate-400 hover:text-slate-100 hover:border-slate-600 hover:bg-slate-800 px-3 py-1.5 rounded-lg text-sm transition;
+  }
+
+  .glass-card {
+    @apply bg-slate-900/60 backdrop-blur-sm border border-slate-800 rounded-xl;
+  }
+
+  .message-appear {
+    animation: fadeUp 0.25s ease forwards;
+  }
+}
+
+.prose-custom {
+  color: #e2e8f0;
+  line-height: 1.7;
+}
+
+.prose-custom h1,
+.prose-custom h2,
+.prose-custom h3 {
+  color: #fff;
+  font-weight: 600;
+  margin: 1rem 0 0.5rem;
+}
+
+.prose-custom h1 { font-size: 1.4rem; }
+.prose-custom h2 { font-size: 1.2rem; }
+.prose-custom h3 { font-size: 1.05rem; }
+
+.prose-custom p { margin-bottom: 0.75rem; }
+
+.prose-custom ul,
+.prose-custom ol {
+  padding-left: 1.4rem;
+}
+
+.prose-custom strong { color: #fff; }
+
+.prose-custom em { color: #94a3b8; }
+
+.prose-custom a {
+  color: #60a5fa;
+  text-decoration: underline;
+}
+
+.prose-custom blockquote {
+  border-left: 3px solid #334155;
+  padding-left: 1rem;
+  color: #94a3b8;
+  font-style: italic;
+}
+
+/* ANIMATIONS */
+@keyframes fadeUp {
+  from {
+    opacity: 0;
+    transform: translateY(8px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+@keyframes blink {
+  50% { opacity: 0; }
+}
+
+.streaming-cursor::after {
+  content: "▋";
+  animation: blink 1s step-end infinite;
+  color: #60a5fa;
+}
