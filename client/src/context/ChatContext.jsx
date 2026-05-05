@@ -7,30 +7,34 @@ export function ChatProvider({ children }) {
   const [sessions, setSessions] = useState([]);
   const [activeSessionId, setActiveSessionId] = useState(null);
   const [messages, setMessages] = useState([]);
-  const [isStreaming, setStreaming] = useState(false);
+  const [isStreaming, setIsStreaming] = useState(false);
   const [streamingText, setStreamingText] = useState("");
   const [error, setError] = useState(null);
   const [sidebarOpen, setSidebarOpen] = useState(true);
 
   const createSession = useCallback(() => {
     const id = uuidv4();
+
     const session = {
       id,
-      title: "New conversion",
+      title: "New conversation",
       createdAt: new Date().toISOString(),
       updatedAt: new Date().toISOString(),
       messageCount: 0,
     };
+
     setSessions((prev) => [session, ...prev]);
     setActiveSessionId(id);
     setMessages([]);
     setError(null);
+
     return id;
   }, []);
 
   const selectSession = useCallback(async (sessionId) => {
     setActiveSessionId(sessionId);
     setError(null);
+
     try {
       const res = await fetch(`/api/sessions/${sessionId}`);
       if (res.ok) {
@@ -45,7 +49,9 @@ export function ChatProvider({ children }) {
   const deleteSession = useCallback(
     async (sessionId) => {
       await fetch(`/api/sessions/${sessionId}`, { method: "DELETE" });
+
       setSessions((prev) => prev.filter((s) => s.id !== sessionId));
+
       if (activeSessionId === sessionId) {
         setActiveSessionId(null);
         setMessages([]);
@@ -69,16 +75,18 @@ export function ChatProvider({ children }) {
       if (isStreaming || !content.trim()) return;
 
       let sessionId = activeSessionId;
+
       if (!sessionId) {
         sessionId = uuidv4();
+
         const session = {
           id: sessionId,
-          title: content.slice(0, 50) + (content.length > 50 ? "..." : ""),
-
+          title: content.slice(0, 50),
           createdAt: new Date().toISOString(),
           updatedAt: new Date().toISOString(),
           messageCount: 0,
         };
+
         setSessions((prev) => [session, ...prev]);
         setActiveSessionId(sessionId);
       }
@@ -99,8 +107,17 @@ export function ChatProvider({ children }) {
         const response = await fetch("/api/chat", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ messages: content, sessionId }),
+          body: JSON.stringify({
+            messages: [
+              {
+                role: "user",
+                content: content,
+              },
+            ],
+            sessionId,
+          }),
         });
+
         if (!response.ok) {
           const errData = await response.json();
           throw new Error(errData.error || "Server error");
@@ -108,6 +125,7 @@ export function ChatProvider({ children }) {
 
         const reader = response.body.getReader();
         const decoder = new TextDecoder();
+
         let accumulated = "";
         let buffer = "";
 
@@ -116,11 +134,11 @@ export function ChatProvider({ children }) {
           if (done) break;
 
           buffer += decoder.decode(value, { stream: true });
-          const lines = buffer.split("/n");
+
+          const lines = buffer.split("\n");
           buffer = lines.pop();
 
           for (const line of lines) {
-            if (line.startsWith("event: ")) continue;
             if (!line.startsWith("data: ")) continue;
 
             try {
@@ -130,30 +148,7 @@ export function ChatProvider({ children }) {
                 accumulated += data.text;
                 setStreamingText(accumulated);
               }
-
-              if (data.sessionId && data.title) {
-                updateSessionTitle(data.sessionId, data.title);
-                setSessions((prev) =>
-                  prev.map((s) =>
-                    s.id === data.sessionId
-                      ? {
-                          ...s,
-                          messageCount: s.messageCount + 2,
-                          updatedAt: new Date().toISOString(),
-                        }
-                      : s,
-                  ),
-                );
-              }
-
-              if (data.message) {
-                throw new Error(data.message);
-              }
-            } catch (parseErr) {
-              if (parseErr.message && !parseErr.message.includes("JSON")) {
-                throw parseErr;
-              }
-            }
+            } catch {}
           }
         }
 
@@ -172,20 +167,18 @@ export function ChatProvider({ children }) {
         setStreamingText("");
       }
     },
-    [activeSessionId, isStreaming, updateSessionTitle],
+    [activeSessionId, isStreaming],
   );
 
   return (
     <ChatContext.Provider
       value={{
         sessions,
-        setSessions,
         activeSessionId,
-        setActiveSessionId,
         messages,
         sendMessage,
         isStreaming,
-        setIsStreamingText,
+        streamingText,
         error,
         setError,
         sidebarOpen,
@@ -193,7 +186,6 @@ export function ChatProvider({ children }) {
         createSession,
         selectSession,
         deleteSession,
-        sendMessage,
         updateSessionTitle,
       }}
     >

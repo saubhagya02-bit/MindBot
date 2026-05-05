@@ -15,7 +15,7 @@ dotenv.config();
 const app = express();
 const PORT = process.env.PORT || 5000;
 
-// Gemini setup
+/*  GEMINI SETUP  */
 const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY);
 
 const safetySettings = [
@@ -44,7 +44,7 @@ const generationConfig = {
   maxOutputTokens: 2048,
 };
 
-// Midleware
+/*  MIDDLEWARE  */
 app.use(helmet());
 app.use(
   cors({
@@ -53,15 +53,18 @@ app.use(
     credentials: true,
   }),
 );
+
 app.use(express.json({ limit: "10mb" }));
 
-// Rate limiting
 const limiter = rateLimit({
   windowMs: 60 * 1000,
   max: 30,
   message: { error: "Too many requests. Please slow down." },
 });
+
 app.use("/api/", limiter);
+
+/*  IN MEMORY STORAGE  */
 
 const sessions = new Map();
 
@@ -70,7 +73,7 @@ function getOrCreateSession(sessionId) {
     sessions.set(sessionId, {
       id: sessionId,
       title: "New conversation",
-      message: [],
+      messages: [],
       createdAt: new Date(),
       updatedAt: new Date(),
     });
@@ -78,10 +81,11 @@ function getOrCreateSession(sessionId) {
   return sessions.get(sessionId);
 }
 
-// Auto-cleanup sessions
+/*  CLEANUP  */
 setInterval(
   () => {
     const cutoff = Date.now() - 2 * 60 * 60 * 1000;
+
     for (const [id, session] of sessions.entries()) {
       if (new Date(session.updatedAt).getTime() < cutoff) {
         sessions.delete(id);
@@ -91,42 +95,51 @@ setInterval(
   30 * 60 * 1000,
 );
 
-// Routes
-// Health check
+/*  ROUTES  */
+
+// Health
 app.get("/api/health", (req, res) => {
   res.json({
     status: "ok",
-    model: "gemini-1.5-flash",
     sessions: sessions.size,
     uptime: Math.floor(process.uptime()),
   });
 });
 
-// Create new session
+// Create session
 app.post("/api/sessions", (req, res) => {
   const sessionId = uuidv4();
   const session = getOrCreateSession(sessionId);
-  res.json({ sessionId: session.id, title: session.title });
+
+  res.json({
+    sessionId: session.id,
+    title: session.title,
+  });
 });
 
-// Get session history
+// Get session
 app.get("/api/sessions/:sessionId", (req, res) => {
   const session = sessions.get(req.params.sessionId);
-  if (!session) return res.status(404).json({ error: "Session not found" });
+
+  if (!session) {
+    return res.status(404).json({ error: "Session not found" });
+  }
+
   res.json(session);
 });
 
-// List all sessions
+// List sessions
 app.get("/api/sessions", (req, res) => {
   const list = Array.from(sessions.values())
-    .map(({ id, title, createdAt, updatedAt, messages }) => ({
-      id,
-      title,
-      createdAt,
-      updatedAt,
-      messageCount: messages.length,
+    .map((s) => ({
+      id: s.id,
+      title: s.title,
+      createdAt: s.createdAt,
+      updatedAt: s.updatedAt,
+      messageCount: s.messages.length,
     }))
     .sort((a, b) => new Date(b.updatedAt) - new Date(a.updatedAt));
+
   res.json(list);
 });
 
@@ -136,28 +149,28 @@ app.delete("/api/sessions/:sessionId", (req, res) => {
   res.json({ success: true });
 });
 
-// Main Chat
+/*  CHAT API  */
 app.post("/api/chat", async (req, res) => {
-  const { message, sessionId } = req.body;
+  const { messages, sessionId } = req.body;
+
+  const message = Array.isArray(messages)
+    ? messages[messages.length - 1]?.content
+    : messages;
 
   if (!message?.trim()) {
     return res.status(400).json({ error: "Message is required" });
   }
-  if (
-    !process.env.GEMINI_API_KEY ||
-    process.env.GEMINI_API_KEY === "your_gemini_api_key_here"
-  ) {
-    return res
-      .status(500)
-      .json({
-        error: "GEMINI_API_KEY is not configured. Please add it to server/.env",
-      });
+
+  if (!process.env.GEMINI_API_KEY) {
+    return res.status(500).json({
+      error: "Missing GEMINI_API_KEY in .env",
+    });
   }
 
   const id = sessionId || uuidv4();
   const session = getOrCreateSession(id);
 
-  // Set title
+  // Set title for first message
   if (session.messages.length === 0) {
     session.title = message.slice(0, 50) + (message.length > 50 ? "..." : "");
   }
@@ -168,13 +181,14 @@ app.post("/api/chat", async (req, res) => {
     content: message,
     timestamp: new Date(),
   };
-  session.message.push(userMsg);
+
+  session.messages.push(userMsg);
   session.updatedAt = new Date();
 
+  /*  SSE HEADERS  */
   res.setHeader("Content-Type", "text/event-stream");
   res.setHeader("Cache-Control", "no-cache");
   res.setHeader("Connection", "keep-alive");
-  res.setHeader("X-Session-Id", id);
 
   const sendEvent = (event, data) => {
     res.write(`event: ${event}\ndata: ${JSON.stringify(data)}\n\n`);
@@ -182,16 +196,14 @@ app.post("/api/chat", async (req, res) => {
 
   try {
     const model = genAI.getGenerativeModel({
-      model: "gemini-1.5-flash",
+      model: "gemini-2.0-flash",
       safetySettings,
       generationConfig,
-      systemInstruction: `You are Gemini AI, a helpful, creative, and intelligent assistant built on Google's Gemini model. 
-You provide clear, accurate, and thoughtful responses. When writing code, always use proper markdown code blocks with language identifiers.
-Be concise but thorough. Use markdown formatting when it helps clarity.`,
+      systemInstruction:
+        "You are a helpful AI assistant. Use markdown formatting when needed.",
     });
 
-    // Build chat history
-    const history = session.message.slice(0, -1).map((msg) => ({
+    const history = session.messages.slice(0, -1).map((msg) => ({
       role: msg.role === "user" ? "user" : "model",
       parts: [{ text: msg.content }],
     }));
@@ -201,12 +213,14 @@ Be concise but thorough. Use markdown formatting when it helps clarity.`,
     const result = await chat.sendMessageStream(message);
 
     let fullText = "";
+
     sendEvent("start", { sessionId: id });
 
     for await (const chunk of result.stream) {
-      const chunkTest = chunk.text();
-      fullText += chunkTest;
-      sendEvent("chunk", { text: chunkTest });
+      const text = chunk.text();
+      fullText += text;
+
+      sendEvent("chunk", { text });
     }
 
     const assistantMsg = {
@@ -215,29 +229,32 @@ Be concise but thorough. Use markdown formatting when it helps clarity.`,
       content: fullText,
       timestamp: new Date(),
     };
-    session.message.push(assistantMsg);
+
+    session.messages.push(assistantMsg);
     session.updatedAt = new Date();
 
     sendEvent("done", {
       sessionId: id,
-      title: session.title,
       messageId: assistantMsg.id,
     });
+
     res.end();
   } catch (err) {
-    console.error("Gemini API error:", err);
-    sendEvent("event", { message: err.message || "Something went wrong" });
+    console.error(err);
+
+    sendEvent("error", {
+      message: err.message || "Something went wrong",
+    });
+
     res.end();
   }
 });
 
-// Start server
+/*  START SERVER  */
+
 app.listen(PORT, () => {
-  console.log(`\n🚀 Server running on http://localhost:${PORT}`);
+  console.log(`🚀 Server running on http://localhost:${PORT}`);
   console.log(
-    `📡 Gemini API: ${process.env.GEMINI_API_KEY ? "✅ Configured" : "❌ Missing API key"}`,
-  );
-  console.log(
-    `🌐 CORS origin: ${process.env.CLIENT_URL || "http://localhost:5173"}\n`,
+    `📡 Gemini API: ${process.env.GEMINI_API_KEY ? "OK" : "MISSING"}`,
   );
 });

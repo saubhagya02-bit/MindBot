@@ -10,10 +10,11 @@ import { useChat } from "../context/ChatContext.jsx";
 import MessageList from "./MessageList.jsx";
 import ChatInput from "./ChatInput.jsx";
 import WelcomeScreen from "./WelcomeScreen.jsx";
+import { MessageSquare } from "lucide-react";
 
 export default function ChatArea() {
   const {
-    message,
+    messages,
     isStreaming,
     streamingText,
     error,
@@ -29,7 +30,7 @@ export default function ChatArea() {
 
   useEffect(() => {
     bottomRef.current?.scrollIntoView({ behavior: "smooth" });
-  }, [MessagesSquare, streamingText]);
+  }, [messages, streamingText]);
 
   const activeSession = sessions.find((s) => s.id === activeSessionId);
   const showWelcome = messages.length === 0 && !isStreaming;
