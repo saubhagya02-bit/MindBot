@@ -14,9 +14,8 @@ dotenv.config();
 
 const app = express();
 const PORT = process.env.PORT || 5000;
-
-/*  GEMINI SETUP  */
-const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY);
+const API_KEY = process.env.GEMINI_API_KEY;
+const genAI = new GoogleGenerativeAI(API_KEY);
 
 const safetySettings = [
   {
@@ -37,35 +36,58 @@ const safetySettings = [
   },
 ];
 
-const generationConfig = {
-  temperature: 0.9,
-  topK: 1,
-  topP: 1,
-  maxOutputTokens: 2048,
-};
+const generationConfig = { temperature: 0.9, topP: 1, maxOutputTokens: 2048 };
 
-/*  MIDDLEWARE  */
-app.use(helmet());
-app.use(
-  cors({
-    origin: process.env.CLIENT_URL || "http://localhost:5173",
-    methods: ["GET", "POST", "DELETE"],
-    credentials: true,
-  }),
-);
+const SYSTEM_PROMPT = `You are Gemini AI, a helpful, creative, and intelligent assistant.
+When writing code, use proper markdown code blocks with language identifiers.
+Be concise but thorough. Use markdown formatting when it helps clarity.`;
 
+const MODELS = [
+  "gemini-2.5-flash",
+  "gemini-2.0-flash",
+  "gemini-2.0-flash-lite",
+  "gemini-2.5-pro",
+  "gemini-2.0-flash-001",
+  "gemini-2.0-flash-lite-001",
+  "gemini-2.5-flash-lite",
+];
+
+async function tryStream(history, message) {
+  let lastError = null;
+
+  for (const modelName of MODELS) {
+    try {
+      console.log(`🤖 Trying: ${modelName}`);
+      const model = genAI.getGenerativeModel({
+        model: modelName,
+        safetySettings,
+        generationConfig,
+        systemInstruction: SYSTEM_PROMPT,
+      });
+      const chat = model.startChat({ history });
+      const result = await chat.sendMessageStream(message);
+      console.log(`✅ Success: ${modelName}`);
+      return { result, modelName };
+    } catch (err) {
+      lastError = err;
+      const code = err.status || err.statusCode || 0;
+      console.log(`⚠️  ${modelName} → ${code}: ${err.message?.slice(0, 80)}`);
+      if (code === 429 || code === 404 || code === 400 || code === 403 || !code)
+        continue;
+      throw err;
+    }
+  }
+
+  throw lastError || new Error("All models failed. Please try again later.");
+}
+
+//  Middleware
+app.use(helmet({ contentSecurityPolicy: false }));
+app.use(cors({ origin: "*", methods: ["GET", "POST", "DELETE"] }));
 app.use(express.json({ limit: "10mb" }));
+app.use(rateLimit({ windowMs: 60 * 1000, max: 100 }));
 
-const limiter = rateLimit({
-  windowMs: 60 * 1000,
-  max: 30,
-  message: { error: "Too many requests. Please slow down." },
-});
-
-app.use("/api/", limiter);
-
-/*  IN MEMORY STORAGE  */
-
+//  Session Store
 const sessions = new Map();
 
 function getOrCreateSession(sessionId) {
@@ -81,180 +103,165 @@ function getOrCreateSession(sessionId) {
   return sessions.get(sessionId);
 }
 
-/*  CLEANUP  */
 setInterval(
   () => {
     const cutoff = Date.now() - 2 * 60 * 60 * 1000;
-
-    for (const [id, session] of sessions.entries()) {
-      if (new Date(session.updatedAt).getTime() < cutoff) {
-        sessions.delete(id);
-      }
+    for (const [id, s] of sessions.entries()) {
+      if (new Date(s.updatedAt).getTime() < cutoff) sessions.delete(id);
     }
   },
   30 * 60 * 1000,
 );
 
-/*  ROUTES  */
-
-// Health
+//  Routes
 app.get("/api/health", (req, res) => {
   res.json({
     status: "ok",
-    sessions: sessions.size,
+    apiKey: API_KEY
+      ? `${API_KEY.slice(0, 8)}...${API_KEY.slice(-4)}`
+      : "❌ MISSING",
+    models: MODELS,
     uptime: Math.floor(process.uptime()),
+    sessions: sessions.size,
   });
 });
 
-// Create session
-app.post("/api/sessions", (req, res) => {
-  const sessionId = uuidv4();
-  const session = getOrCreateSession(sessionId);
-
-  res.json({
-    sessionId: session.id,
-    title: session.title,
-  });
-});
-
-// Get session
-app.get("/api/sessions/:sessionId", (req, res) => {
-  const session = sessions.get(req.params.sessionId);
-
-  if (!session) {
-    return res.status(404).json({ error: "Session not found" });
+app.get("/api/models", async (req, res) => {
+  try {
+    const r = await fetch(
+      `https://generativelanguage.googleapis.com/v1beta/models?key=${API_KEY}`,
+    );
+    const data = await r.json();
+    if (data.error) return res.status(400).json(data);
+    const models = (data.models || [])
+      .filter((m) => m.supportedGenerationMethods?.includes("generateContent"))
+      .map((m) => ({ name: m.name, displayName: m.displayName }));
+    res.json({ total: models.length, models });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
   }
-
-  res.json(session);
 });
 
-// List sessions
+app.post("/api/sessions", (req, res) => {
+  const id = uuidv4();
+  const session = getOrCreateSession(id);
+  res.json({ sessionId: session.id, title: session.title });
+});
+
 app.get("/api/sessions", (req, res) => {
   const list = Array.from(sessions.values())
-    .map((s) => ({
-      id: s.id,
-      title: s.title,
-      createdAt: s.createdAt,
-      updatedAt: s.updatedAt,
-      messageCount: s.messages.length,
+    .map(({ id, title, createdAt, updatedAt, messages }) => ({
+      id,
+      title,
+      createdAt,
+      updatedAt,
+      messageCount: messages.length,
     }))
     .sort((a, b) => new Date(b.updatedAt) - new Date(a.updatedAt));
-
   res.json(list);
 });
 
-// Delete session
-app.delete("/api/sessions/:sessionId", (req, res) => {
-  sessions.delete(req.params.sessionId);
+app.get("/api/sessions/:id", (req, res) => {
+  const s = sessions.get(req.params.id);
+  if (!s) return res.status(404).json({ error: "Session not found" });
+  res.json(s);
+});
+
+app.delete("/api/sessions/:id", (req, res) => {
+  sessions.delete(req.params.id);
   res.json({ success: true });
 });
 
-/*  CHAT API  */
+//  Chat
 app.post("/api/chat", async (req, res) => {
-  const { messages, sessionId } = req.body;
+  const { message, sessionId } = req.body;
 
-  const message = Array.isArray(messages)
-    ? messages[messages.length - 1]?.content
-    : messages;
+  console.log("\n📨 /api/chat →", {
+    message: message?.slice(0, 60),
+    sessionId,
+  });
 
   if (!message?.trim()) {
-    return res.status(400).json({ error: "Message is required" });
+    return res.status(400).json({ error: "Message cannot be empty" });
   }
-
-  if (!process.env.GEMINI_API_KEY) {
-    return res.status(500).json({
-      error: "Missing GEMINI_API_KEY in .env",
-    });
+  if (!API_KEY || API_KEY === "your_gemini_api_key_here") {
+    return res
+      .status(500)
+      .json({ error: "GEMINI_API_KEY missing in server/.env" });
   }
 
   const id = sessionId || uuidv4();
   const session = getOrCreateSession(id);
 
-  // Set title for first message
   if (session.messages.length === 0) {
     session.title = message.slice(0, 50) + (message.length > 50 ? "..." : "");
   }
 
-  const userMsg = {
+  session.messages.push({
     id: uuidv4(),
     role: "user",
     content: message,
     timestamp: new Date(),
-  };
-
-  session.messages.push(userMsg);
+  });
   session.updatedAt = new Date();
 
-  /*  SSE HEADERS  */
+  // SSE headers
   res.setHeader("Content-Type", "text/event-stream");
   res.setHeader("Cache-Control", "no-cache");
   res.setHeader("Connection", "keep-alive");
+  res.setHeader("X-Accel-Buffering", "no");
+  res.flushHeaders();
 
-  const sendEvent = (event, data) => {
-    res.write(`event: ${event}\ndata: ${JSON.stringify(data)}\n\n`);
+  const send = (event, data) => {
+    try {
+      res.write(`event: ${event}\ndata: ${JSON.stringify(data)}\n\n`);
+    } catch {}
   };
 
   try {
-    const model = genAI.getGenerativeModel({
-      model: "gemini-2.0-flash",
-      safetySettings,
-      generationConfig,
-      systemInstruction:
-        "You are a helpful AI assistant. Use markdown formatting when needed.",
-    });
-
-    const history = session.messages.slice(0, -1).map((msg) => ({
-      role: msg.role === "user" ? "user" : "model",
-      parts: [{ text: msg.content }],
+    const history = session.messages.slice(0, -1).map((m) => ({
+      role: m.role === "user" ? "user" : "model",
+      parts: [{ text: m.content }],
     }));
 
-    const chat = model.startChat({ history });
-
-    const result = await chat.sendMessageStream(message);
+    const { result, modelName } = await tryStream(history, message);
 
     let fullText = "";
-
-    sendEvent("start", { sessionId: id });
+    send("start", { sessionId: id, model: modelName });
 
     for await (const chunk of result.stream) {
       const text = chunk.text();
       fullText += text;
-
-      sendEvent("chunk", { text });
+      send("chunk", { text });
     }
 
-    const assistantMsg = {
+    session.messages.push({
       id: uuidv4(),
       role: "assistant",
       content: fullText,
       timestamp: new Date(),
-    };
-
-    session.messages.push(assistantMsg);
+    });
     session.updatedAt = new Date();
 
-    sendEvent("done", {
-      sessionId: id,
-      messageId: assistantMsg.id,
-    });
-
+    send("done", { sessionId: id, title: session.title });
     res.end();
   } catch (err) {
-    console.error(err);
-
-    sendEvent("error", {
-      message: err.message || "Something went wrong",
-    });
-
+    console.error("❌ Final error:", err.message);
+    const code = err.status || err.statusCode;
+    let msg = err.message || "Something went wrong.";
+    if (code === 429) msg = "Rate limit hit. Please wait and try again.";
+    if (code === 403) msg = "Invalid API key. Check server/.env";
+    send("error", { message: msg });
     res.end();
   }
 });
 
-/*  START SERVER  */
-
+//  Start
 app.listen(PORT, () => {
-  console.log(`🚀 Server running on http://localhost:${PORT}`);
+  console.log(`\n🚀 Server → http://localhost:${PORT}`);
   console.log(
-    `📡 Gemini API: ${process.env.GEMINI_API_KEY ? "OK" : "MISSING"}`,
+    `🔑 API Key: ${API_KEY ? API_KEY.slice(0, 8) + "..." + API_KEY.slice(-4) : "❌ MISSING"}`,
   );
+  console.log(`🤖 Using models: ${MODELS.join(", ")}`);
+  console.log(`\n👉 Health: http://localhost:${PORT}/api/health\n`);
 });

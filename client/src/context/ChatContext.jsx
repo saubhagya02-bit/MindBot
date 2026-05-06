@@ -14,7 +14,6 @@ export function ChatProvider({ children }) {
 
   const createSession = useCallback(() => {
     const id = uuidv4();
-
     const session = {
       id,
       title: "New conversation",
@@ -22,19 +21,16 @@ export function ChatProvider({ children }) {
       updatedAt: new Date().toISOString(),
       messageCount: 0,
     };
-
     setSessions((prev) => [session, ...prev]);
     setActiveSessionId(id);
     setMessages([]);
     setError(null);
-
     return id;
   }, []);
 
   const selectSession = useCallback(async (sessionId) => {
     setActiveSessionId(sessionId);
     setError(null);
-
     try {
       const res = await fetch(`/api/sessions/${sessionId}`);
       if (res.ok) {
@@ -49,9 +45,7 @@ export function ChatProvider({ children }) {
   const deleteSession = useCallback(
     async (sessionId) => {
       await fetch(`/api/sessions/${sessionId}`, { method: "DELETE" });
-
       setSessions((prev) => prev.filter((s) => s.id !== sessionId));
-
       if (activeSessionId === sessionId) {
         setActiveSessionId(null);
         setMessages([]);
@@ -72,21 +66,19 @@ export function ChatProvider({ children }) {
 
   const sendMessage = useCallback(
     async (content) => {
-      if (isStreaming || !content.trim()) return;
+      const trimmed = content?.trim();
+      if (isStreaming || !trimmed) return;
 
       let sessionId = activeSessionId;
-
       if (!sessionId) {
         sessionId = uuidv4();
-
         const session = {
           id: sessionId,
-          title: content.slice(0, 50),
+          title: trimmed.slice(0, 50) + (trimmed.length > 50 ? "..." : ""),
           createdAt: new Date().toISOString(),
           updatedAt: new Date().toISOString(),
           messageCount: 0,
         };
-
         setSessions((prev) => [session, ...prev]);
         setActiveSessionId(sessionId);
       }
@@ -94,7 +86,7 @@ export function ChatProvider({ children }) {
       const userMessage = {
         id: uuidv4(),
         role: "user",
-        content,
+        content: trimmed,
         timestamp: new Date().toISOString(),
       };
 
@@ -103,30 +95,34 @@ export function ChatProvider({ children }) {
       setStreamingText("");
       setError(null);
 
+      let accumulated = "";
+
       try {
+        const payload = { message: trimmed, sessionId };
+        console.log("Sending:", payload);
+
         const response = await fetch("/api/chat", {
           method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({
-            messages: [
-              {
-                role: "user",
-                content: content,
-              },
-            ],
-            sessionId,
-          }),
+          headers: {
+            "Content-Type": "application/json",
+            Accept: "text/event-stream",
+          },
+          body: JSON.stringify(payload),
         });
 
+        console.log("Response status:", response.status, response.statusText);
+
         if (!response.ok) {
-          const errData = await response.json();
-          throw new Error(errData.error || "Server error");
+          let errMsg = "Server error " + response.status;
+          try {
+            const errData = await response.json();
+            errMsg = errData.error || errMsg;
+          } catch {}
+          throw new Error(errMsg);
         }
 
         const reader = response.body.getReader();
         const decoder = new TextDecoder();
-
-        let accumulated = "";
         let buffer = "";
 
         while (true) {
@@ -134,22 +130,60 @@ export function ChatProvider({ children }) {
           if (done) break;
 
           buffer += decoder.decode(value, { stream: true });
-
           const lines = buffer.split("\n");
-          buffer = lines.pop();
+          buffer = lines.pop() ?? "";
 
           for (const line of lines) {
-            if (!line.startsWith("data: ")) continue;
+            const trimmedLine = line.trim();
+            if (!trimmedLine || trimmedLine.startsWith("event:")) continue;
+            if (!trimmedLine.startsWith("data:")) continue;
+
+            const raw = trimmedLine.slice(5).trim();
+            if (!raw || raw === "[DONE]") continue;
 
             try {
-              const data = JSON.parse(line.slice(6));
+              const data = JSON.parse(raw);
 
-              if (data.text) {
+              if (typeof data.text === "string") {
                 accumulated += data.text;
                 setStreamingText(accumulated);
               }
-            } catch {}
+
+              if (data.sessionId && data.title) {
+                updateSessionTitle(data.sessionId, data.title);
+                setSessions((prev) =>
+                  prev.map((s) =>
+                    s.id === data.sessionId
+                      ? {
+                          ...s,
+                          messageCount: s.messageCount + 2,
+                          updatedAt: new Date().toISOString(),
+                        }
+                      : s,
+                  ),
+                );
+              }
+
+              if (data.message && !data.text && !data.sessionId) {
+                throw new Error(data.message);
+              }
+            } catch (parseErr) {
+              if (
+                parseErr.message &&
+                !parseErr.message.includes("JSON") &&
+                !parseErr.message.includes("Unexpected token") &&
+                !parseErr.message.includes("Unexpected end")
+              ) {
+                throw parseErr;
+              }
+            }
           }
+        }
+
+        if (!accumulated) {
+          throw new Error(
+            "No response received. The AI may be rate limited — please try again.",
+          );
         }
 
         const assistantMessage = {
@@ -158,25 +192,30 @@ export function ChatProvider({ children }) {
           content: accumulated,
           timestamp: new Date().toISOString(),
         };
-
         setMessages((prev) => [...prev, assistantMessage]);
       } catch (err) {
-        setError(err.message || "Something went wrong");
+        console.error("Chat error:", err.message);
+        setError(err.message || "Something went wrong. Please try again.");
+        if (!accumulated) {
+          setMessages((prev) => prev.filter((m) => m.id !== userMessage.id));
+        }
       } finally {
         setIsStreaming(false);
         setStreamingText("");
       }
     },
-    [activeSessionId, isStreaming],
+    [activeSessionId, isStreaming, updateSessionTitle],
   );
 
   return (
     <ChatContext.Provider
       value={{
         sessions,
+        setSessions,
         activeSessionId,
+        setActiveSessionId,
         messages,
-        sendMessage,
+        setMessages,
         isStreaming,
         streamingText,
         error,
@@ -186,6 +225,7 @@ export function ChatProvider({ children }) {
         createSession,
         selectSession,
         deleteSession,
+        sendMessage,
         updateSessionTitle,
       }}
     >
