@@ -9,8 +9,8 @@ function AppInner() {
   if (loading) {
     return (
       <div className="min-h-screen bg-base-950 flex items-center justify-center">
-        <div className="w-8 h-8 rounded-xl bg-gradient-to-br from-gem-400 to-accent-purple flex items-center justify-center animate-pulse">
-          <span className="text-white text-lg">✦</span>
+        <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-gem-400 to-accent-purple flex items-center justify-center animate-pulse">
+          <span className="text-white text-xl">✦</span>
         </div>
       </div>
     );
@@ -19,7 +19,7 @@ function AppInner() {
   if (!user) return <AuthPage />;
 
   return (
-    <ChatProvider>
+    <ChatProvider userId={user.id}>
       <Layout />
     </ChatProvider>
   );

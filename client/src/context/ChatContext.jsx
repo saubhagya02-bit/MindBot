@@ -9,7 +9,7 @@ import { v4 as uuidv4 } from "uuid";
 
 const ChatContext = createContext(null);
 
-export function ChatProvider({ children }) {
+export function ChatProvider({ children, userId }) {
   const [sessions, setSessions] = useState([]);
   const [activeSessionId, setActiveSessionId] = useState(null);
   const [messages, setMessages] = useState([]);
@@ -19,14 +19,15 @@ export function ChatProvider({ children }) {
   const [sidebarOpen, setSidebarOpen] = useState(true);
   const [loadingHistory, setLoadingHistory] = useState(true);
 
+  // Load only THIS user's sessions on mount
   useEffect(() => {
+    if (!userId) return;
     async function fetchSessions() {
       try {
-        const res = await fetch("/api/sessions");
+        const res = await fetch(`/api/sessions?userId=${userId}`);
         if (res.ok) {
           const data = await res.json();
           setSessions(data);
-          console.log(`📂 Loaded ${data.length} sessions from server`);
         }
       } catch (err) {
         console.error("Could not load sessions:", err.message);
@@ -35,12 +36,13 @@ export function ChatProvider({ children }) {
       }
     }
     fetchSessions();
-  }, []);
+  }, [userId]);
 
   const createSession = useCallback(() => {
     const id = uuidv4();
     const session = {
       id,
+      userId,
       title: "New conversation",
       createdAt: new Date().toISOString(),
       updatedAt: new Date().toISOString(),
@@ -51,7 +53,7 @@ export function ChatProvider({ children }) {
     setMessages([]);
     setError(null);
     return id;
-  }, []);
+  }, [userId]);
 
   const selectSession = useCallback(
     async (sessionId) => {
@@ -60,7 +62,7 @@ export function ChatProvider({ children }) {
       setMessages([]);
       setError(null);
       try {
-        const res = await fetch(`/api/sessions/${sessionId}`);
+        const res = await fetch(`/api/sessions/${sessionId}?userId=${userId}`);
         if (res.ok) {
           const data = await res.json();
           setMessages(data.messages || []);
@@ -69,13 +71,15 @@ export function ChatProvider({ children }) {
         console.error("Could not load session:", err.message);
       }
     },
-    [activeSessionId],
+    [activeSessionId, userId],
   );
 
   const deleteSession = useCallback(
     async (sessionId) => {
       try {
-        await fetch(`/api/sessions/${sessionId}`, { method: "DELETE" });
+        await fetch(`/api/sessions/${sessionId}?userId=${userId}`, {
+          method: "DELETE",
+        });
       } catch {}
       setSessions((prev) => prev.filter((s) => s.id !== sessionId));
       if (activeSessionId === sessionId) {
@@ -83,7 +87,7 @@ export function ChatProvider({ children }) {
         setMessages([]);
       }
     },
-    [activeSessionId],
+    [activeSessionId, userId],
   );
 
   const updateSessionTitle = useCallback((sessionId, title) => {
@@ -106,6 +110,7 @@ export function ChatProvider({ children }) {
         sessionId = uuidv4();
         const session = {
           id: sessionId,
+          userId,
           title: trimmed.slice(0, 50) + (trimmed.length > 50 ? "..." : ""),
           createdAt: new Date().toISOString(),
           updatedAt: new Date().toISOString(),
@@ -136,16 +141,14 @@ export function ChatProvider({ children }) {
             "Content-Type": "application/json",
             Accept: "text/event-stream",
           },
-          body: JSON.stringify({ message: trimmed, sessionId }),
+          body: JSON.stringify({ message: trimmed, sessionId, userId }),
         });
-
-        console.log("Response status:", response.status, response.statusText);
 
         if (!response.ok) {
           let errMsg = `Server error ${response.status}`;
           try {
-            const errData = await response.json();
-            errMsg = errData.error || errMsg;
+            const e = await response.json();
+            errMsg = e.error || errMsg;
           } catch {}
           throw new Error(errMsg);
         }
@@ -157,27 +160,22 @@ export function ChatProvider({ children }) {
         while (true) {
           const { done, value } = await reader.read();
           if (done) break;
-
           buffer += decoder.decode(value, { stream: true });
           const lines = buffer.split("\n");
           buffer = lines.pop() ?? "";
 
           for (const line of lines) {
-            const trimmedLine = line.trim();
-            if (!trimmedLine || trimmedLine.startsWith("event:")) continue;
-            if (!trimmedLine.startsWith("data:")) continue;
-
-            const raw = trimmedLine.slice(5).trim();
+            const t = line.trim();
+            if (!t || t.startsWith("event:")) continue;
+            if (!t.startsWith("data:")) continue;
+            const raw = t.slice(5).trim();
             if (!raw || raw === "[DONE]") continue;
-
             try {
               const data = JSON.parse(raw);
-
               if (typeof data.text === "string") {
                 accumulated += data.text;
                 setStreamingText(accumulated);
               }
-
               if (data.sessionId && data.title) {
                 updateSessionTitle(data.sessionId, data.title);
                 setSessions((prev) =>
@@ -192,46 +190,42 @@ export function ChatProvider({ children }) {
                   ),
                 );
               }
-
               if (data.message && !data.text && !data.sessionId) {
                 if (!accumulated) throw new Error(data.message);
               }
-            } catch (parseErr) {
+            } catch (pe) {
               if (
-                parseErr.message &&
-                !parseErr.message.includes("JSON") &&
-                !parseErr.message.includes("Unexpected token") &&
-                !parseErr.message.includes("Unexpected end")
-              ) {
-                throw parseErr;
-              }
+                pe.message &&
+                !pe.message.includes("JSON") &&
+                !pe.message.includes("Unexpected")
+              )
+                throw pe;
             }
           }
         }
 
-        if (!accumulated) {
+        if (!accumulated)
           throw new Error("No response received. Please try again.");
-        }
 
-        const assistantMessage = {
-          id: uuidv4(),
-          role: "assistant",
-          content: accumulated,
-          timestamp: new Date().toISOString(),
-        };
-        setMessages((prev) => [...prev, assistantMessage]);
+        setMessages((prev) => [
+          ...prev,
+          {
+            id: uuidv4(),
+            role: "assistant",
+            content: accumulated,
+            timestamp: new Date().toISOString(),
+          },
+        ]);
       } catch (err) {
-        console.error("Chat error:", err.message);
-        setError(err.message || "Something went wrong. Please try again.");
-        if (!accumulated) {
+        setError(err.message || "Something went wrong.");
+        if (!accumulated)
           setMessages((prev) => prev.filter((m) => m.id !== userMessage.id));
-        }
       } finally {
         setIsStreaming(false);
         setStreamingText("");
       }
     },
-    [activeSessionId, isStreaming, updateSessionTitle],
+    [activeSessionId, isStreaming, userId, updateSessionTitle],
   );
 
   return (

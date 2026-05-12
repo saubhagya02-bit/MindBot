@@ -25,7 +25,6 @@ const genAI = new GoogleGenerativeAI(API_KEY);
 
 const DATA_DIR = path.join(__dirname, "data");
 const SESSIONS_FILE = path.join(DATA_DIR, "sessions.json");
-
 if (!fs.existsSync(DATA_DIR)) fs.mkdirSync(DATA_DIR, { recursive: true });
 
 function loadSessions() {
@@ -34,30 +33,26 @@ function loadSessions() {
       const raw = fs.readFileSync(SESSIONS_FILE, "utf-8");
       const parsed = JSON.parse(raw);
       const map = new Map();
-      for (const [id, session] of Object.entries(parsed)) {
-        map.set(id, session);
-      }
+      for (const [id, session] of Object.entries(parsed)) map.set(id, session);
       console.log(`📂 Loaded ${map.size} sessions from disk`);
       return map;
     }
   } catch (err) {
-    console.error("⚠️  Could not load sessions:", err.message);
+    console.error("⚠️ Could not load sessions:", err.message);
   }
   return new Map();
 }
 
-// Save sessions to disk
 function saveSessions() {
   try {
     const obj = {};
-    for (const [id, session] of sessions.entries()) {
-      obj[id] = session;
-    }
+    for (const [id, session] of sessions.entries()) obj[id] = session;
     fs.writeFileSync(SESSIONS_FILE, JSON.stringify(obj, null, 2), "utf-8");
   } catch (err) {
-    console.error("⚠️  Could not save sessions:", err.message);
+    console.error("⚠️ Could not save sessions:", err.message);
   }
 }
+
 let saveTimeout = null;
 function scheduleSave() {
   if (saveTimeout) clearTimeout(saveTimeout);
@@ -66,7 +61,6 @@ function scheduleSave() {
 
 const sessions = loadSessions();
 
-// Gemini Setup
 const safetySettings = [
   {
     category: HarmCategory.HARM_CATEGORY_HARASSMENT,
@@ -85,10 +79,8 @@ const safetySettings = [
     threshold: HarmBlockThreshold.BLOCK_MEDIUM_AND_ABOVE,
   },
 ];
-
 const generationConfig = { temperature: 0.9, topP: 1, maxOutputTokens: 2048 };
-
-const SYSTEM_PROMPT = `You are MindBot AI, a helpful, creative, and intelligent assistant.
+const SYSTEM_PROMPT = `You are Gemini AI, a helpful, creative, and intelligent assistant.
 When writing code, use proper markdown code blocks with language identifiers.
 Be concise but thorough. Use markdown formatting when it helps clarity.`;
 
@@ -98,7 +90,6 @@ const MODELS = [
   "gemini-2.0-flash-lite",
   "gemini-2.5-pro",
   "gemini-2.0-flash-001",
-  "gemini-2.0-flash-lite-001",
   "gemini-2.5-flash-lite",
 ];
 
@@ -120,13 +111,13 @@ async function tryStream(history, message) {
     } catch (err) {
       lastError = err;
       const code = err.status || err.statusCode || 0;
-      console.log(`⚠️  ${modelName} → ${code}: ${err.message?.slice(0, 80)}`);
+      console.log(`⚠️  ${modelName} → ${code}`);
       if (code === 429 || code === 404 || code === 400 || code === 403 || !code)
         continue;
       throw err;
     }
   }
-  throw lastError || new Error("All models failed. Please try again later.");
+  throw lastError || new Error("All models failed.");
 }
 
 // Middleware
@@ -135,21 +126,29 @@ app.use(cors({ origin: "*", methods: ["GET", "POST", "DELETE"] }));
 app.use(express.json({ limit: "10mb" }));
 app.use(rateLimit({ windowMs: 60 * 1000, max: 100 }));
 
-function getOrCreateSession(sessionId) {
+function getOrCreateSession(sessionId, userId) {
   if (!sessions.has(sessionId)) {
-    const session = {
+    sessions.set(sessionId, {
       id: sessionId,
+      userId, // ← owner
       title: "New conversation",
       messages: [],
       createdAt: new Date().toISOString(),
       updatedAt: new Date().toISOString(),
-    };
-    sessions.set(sessionId, session);
+    });
     scheduleSave();
   }
   return sessions.get(sessionId);
 }
 
+function ownedBy(session, userId) {
+  if (!session) return false;
+
+  if (!session.userId) return true;
+  return session.userId === userId;
+}
+
+// Cleanup old sessions (30 days)
 setInterval(
   () => {
     const cutoff = Date.now() - 30 * 24 * 60 * 60 * 1000;
@@ -161,7 +160,7 @@ setInterval(
       }
     }
     if (deleted > 0) {
-      console.log(`🧹 Cleaned up ${deleted} old sessions`);
+      console.log(`🧹 Cleaned ${deleted} sessions`);
       saveSessions();
     }
   },
@@ -178,46 +177,28 @@ process.on("SIGTERM", () => {
 });
 
 // Routes
-app.get("/api/health", (req, res) => {
+app.get("/api/health", (req, res) =>
   res.json({
     status: "ok",
     apiKey: API_KEY
       ? `${API_KEY.slice(0, 8)}...${API_KEY.slice(-4)}`
       : "❌ MISSING",
-    models: MODELS,
     sessions: sessions.size,
     uptime: Math.floor(process.uptime()),
-    dataFile: SESSIONS_FILE,
-  });
-});
-
-app.get("/api/models", async (req, res) => {
-  try {
-    const r = await fetch(
-      `https://generativelanguage.googleapis.com/v1beta/models?key=${API_KEY}`,
-    );
-    const data = await r.json();
-    if (data.error) return res.status(400).json(data);
-    const models = (data.models || [])
-      .filter((m) => m.supportedGenerationMethods?.includes("generateContent"))
-      .map((m) => ({ name: m.name, displayName: m.displayName }));
-    res.json({ total: models.length, models });
-  } catch (err) {
-    res.status(500).json({ error: err.message });
-  }
-});
-
-app.post("/api/sessions", (req, res) => {
-  const id = uuidv4();
-  const session = getOrCreateSession(id);
-  scheduleSave();
-  res.json({ sessionId: session.id, title: session.title });
-});
+  }),
+);
 
 app.get("/api/sessions", (req, res) => {
+  const { userId } = req.query;
   const list = Array.from(sessions.values())
-    .map(({ id, title, createdAt, updatedAt, messages }) => ({
+    .filter((s) => {
+      if (!userId) return true;
+
+      return !s.userId || s.userId === userId;
+    })
+    .map(({ id, userId: sUserId, title, createdAt, updatedAt, messages }) => ({
       id,
+      userId: sUserId,
       title,
       createdAt,
       updatedAt,
@@ -227,13 +208,22 @@ app.get("/api/sessions", (req, res) => {
   res.json(list);
 });
 
+// Get single session — only if owned by user
 app.get("/api/sessions/:id", (req, res) => {
-  const s = sessions.get(req.params.id);
-  if (!s) return res.status(404).json({ error: "Session not found" });
-  res.json(s);
+  const { userId } = req.query;
+  const session = sessions.get(req.params.id);
+  if (!session) return res.status(404).json({ error: "Session not found" });
+  if (userId && !ownedBy(session, userId))
+    return res.status(403).json({ error: "Access denied" });
+  res.json(session);
 });
 
+// Delete session — only if owned by user
 app.delete("/api/sessions/:id", (req, res) => {
+  const { userId } = req.query;
+  const session = sessions.get(req.params.id);
+  if (session && userId && !ownedBy(session, userId))
+    return res.status(403).json({ error: "Access denied" });
   sessions.delete(req.params.id);
   scheduleSave();
   res.json({ success: true });
@@ -241,24 +231,24 @@ app.delete("/api/sessions/:id", (req, res) => {
 
 // Chat
 app.post("/api/chat", async (req, res) => {
-  const { message, sessionId } = req.body;
+  const { message, sessionId, userId } = req.body;
 
-  console.log("\n📨 /api/chat →", {
-    message: message?.slice(0, 60),
-    sessionId,
+  console.log("\n📨 /api/chat", {
+    user: userId?.slice(0, 8),
+    message: message?.slice(0, 50),
   });
 
-  if (!message?.trim()) {
+  if (!message?.trim())
     return res.status(400).json({ error: "Message cannot be empty" });
-  }
-  if (!API_KEY || API_KEY === "your_gemini_api_key_here") {
-    return res
-      .status(500)
-      .json({ error: "GEMINI_API_KEY missing in server/.env" });
-  }
+  if (!API_KEY || API_KEY === "your_gemini_api_key_here")
+    return res.status(500).json({ error: "GEMINI_API_KEY missing" });
+  if (!userId) return res.status(400).json({ error: "userId is required" });
 
   const id = sessionId || uuidv4();
-  const session = getOrCreateSession(id);
+  const session = getOrCreateSession(id, userId);
+
+  if (!ownedBy(session, userId))
+    return res.status(403).json({ error: "Access denied" });
 
   if (session.messages.length === 0) {
     session.title = message.slice(0, 50) + (message.length > 50 ? "..." : "");
@@ -291,7 +281,6 @@ app.post("/api/chat", async (req, res) => {
     }));
 
     const { result, modelName } = await tryStream(history, message);
-
     let fullText = "";
     send("start", { sessionId: id, model: modelName });
 
@@ -308,13 +297,12 @@ app.post("/api/chat", async (req, res) => {
       timestamp: new Date().toISOString(),
     });
     session.updatedAt = new Date().toISOString();
-
     scheduleSave();
 
     send("done", { sessionId: id, title: session.title });
     res.end();
   } catch (err) {
-    console.error("❌ Final error:", err.message);
+    console.error("❌ Error:", err.message);
     const code = err.status || err.statusCode;
     let msg = err.message || "Something went wrong.";
     if (code === 429) msg = "Rate limit hit. Please wait and try again.";
@@ -329,9 +317,6 @@ app.listen(PORT, () => {
   console.log(
     `🔑 API Key: ${API_KEY ? API_KEY.slice(0, 8) + "..." + API_KEY.slice(-4) : "❌ MISSING"}`,
   );
-  console.log(`💾 Sessions saved to: ${SESSIONS_FILE}`);
-  console.log(`📊 Sessions loaded: ${sessions.size}`);
-  console.log(
-    `🤖 Models: ${MODELS.slice(0, 3).join(", ")} + ${MODELS.length - 3} more\n`,
-  );
+  console.log(`💾 Data: ${SESSIONS_FILE}`);
+  console.log(`👥 Per-user session isolation: ✅ enabled\n`);
 });
