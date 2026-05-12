@@ -38,5 +38,25 @@
     ],
     "createdAt": "2026-05-12T10:44:38.036Z",
     "updatedAt": "2026-05-12T10:44:41.515Z"
+  },
+  "81948925-5d60-4d82-bc01-31c4f039ae03": {
+    "id": "81948925-5d60-4d82-bc01-31c4f039ae03",
+    "title": "hi",
+    "messages": [
+      {
+        "id": "be1aae8b-723e-41ce-9e99-f8c7611216c4",
+        "role": "user",
+        "content": "hi",
+        "timestamp": "2026-05-12T10:58:02.628Z"
+      },
+      {
+        "id": "4ecc0284-682d-4b7c-851f-6605ff998224",
+        "role": "assistant",
+        "content": "Hello! How can I help you today?",
+        "timestamp": "2026-05-12T10:58:11.344Z"
+      }
+    ],
+    "createdAt": "2026-05-12T10:58:02.622Z",
+    "updatedAt": "2026-05-12T10:58:11.344Z"
   }
 }
