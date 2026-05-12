@@ -34,7 +34,7 @@ function CodeBlock({ language, children }) {
       </div>
       <SyntaxHighlighter
         language={language || "text"}
-        style={oneDark}
+        style={vscDarkPlus}
         customStyle={{
           margin: 0,
           borderRadius: 0,
