@@ -89,8 +89,8 @@ export default function Message({
         <div
           className={`relative rounded-2xl px-4 py-3 text-sm leading-relaxed ${
             isAI
-              ? "bg-base-800/70 border border-base-700/50 rounded-tl-sm"
-              : "bg-gem-500/15 border border-gem-500/25 rounded-tr-sm"
+              ? "bg-[#1e2330] border border-[#2e3452] rounded-tl-sm text-slate-100"
+              : "bg-gem-500/15 border border-gem-500/25 rounded-tr-sm text-slate-100"
           }`}
         >
           {isStreaming && !isStreamingContent && (
