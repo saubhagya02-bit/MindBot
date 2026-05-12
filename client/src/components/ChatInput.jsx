@@ -53,7 +53,7 @@ export default function ChatInput() {
           value={text}
           onChange={(e) => setText(e.target.value)}
           onKeyDown={handleKeyDown}
-          placeholder="Message Gemini..."
+          placeholder="Message MindBot..."
           disabled={isStreaming}
           rows={1}
           className="flex-1 bg-transparent text-slate-200 placeholder-slate-600 text-sm resize-none outline-none leading-relaxed disabled:opacity-50 min-h-[22px] max-h-[200px]"

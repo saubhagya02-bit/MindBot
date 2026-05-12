@@ -50,7 +50,7 @@ export default function ChatArea() {
             )}
           </button>
           <span className="text-sm text-slate-400 truncate max-w-xs">
-            {activeSession?.title || "Gemini Chat"}
+            {activeSession?.title || "MindBot Chat"}
           </span>
         </div>
         <button
