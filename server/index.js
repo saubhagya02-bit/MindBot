@@ -9,14 +9,64 @@ import {
   HarmBlockThreshold,
 } from "@google/generative-ai";
 import { v4 as uuidv4 } from "uuid";
+import fs from "fs";
+import path from "path";
+import { fileURLToPath } from "url";
 
 dotenv.config();
+
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = path.dirname(__filename);
 
 const app = express();
 const PORT = process.env.PORT || 5000;
 const API_KEY = process.env.GEMINI_API_KEY;
 const genAI = new GoogleGenerativeAI(API_KEY);
 
+const DATA_DIR = path.join(__dirname, "data");
+const SESSIONS_FILE = path.join(DATA_DIR, "sessions.json");
+
+if (!fs.existsSync(DATA_DIR)) fs.mkdirSync(DATA_DIR, { recursive: true });
+
+function loadSessions() {
+  try {
+    if (fs.existsSync(SESSIONS_FILE)) {
+      const raw = fs.readFileSync(SESSIONS_FILE, "utf-8");
+      const parsed = JSON.parse(raw);
+      const map = new Map();
+      for (const [id, session] of Object.entries(parsed)) {
+        map.set(id, session);
+      }
+      console.log(`📂 Loaded ${map.size} sessions from disk`);
+      return map;
+    }
+  } catch (err) {
+    console.error("⚠️  Could not load sessions:", err.message);
+  }
+  return new Map();
+}
+
+// Save sessions to disk
+function saveSessions() {
+  try {
+    const obj = {};
+    for (const [id, session] of sessions.entries()) {
+      obj[id] = session;
+    }
+    fs.writeFileSync(SESSIONS_FILE, JSON.stringify(obj, null, 2), "utf-8");
+  } catch (err) {
+    console.error("⚠️  Could not save sessions:", err.message);
+  }
+}
+let saveTimeout = null;
+function scheduleSave() {
+  if (saveTimeout) clearTimeout(saveTimeout);
+  saveTimeout = setTimeout(saveSessions, 1000);
+}
+
+const sessions = loadSessions();
+
+// Gemini Setup
 const safetySettings = [
   {
     category: HarmCategory.HARM_CATEGORY_HARASSMENT,
@@ -38,7 +88,7 @@ const safetySettings = [
 
 const generationConfig = { temperature: 0.9, topP: 1, maxOutputTokens: 2048 };
 
-const SYSTEM_PROMPT = `You are Gemini AI, a helpful, creative, and intelligent assistant.
+const SYSTEM_PROMPT = `You are MindBot AI, a helpful, creative, and intelligent assistant.
 When writing code, use proper markdown code blocks with language identifiers.
 Be concise but thorough. Use markdown formatting when it helps clarity.`;
 
@@ -54,7 +104,6 @@ const MODELS = [
 
 async function tryStream(history, message) {
   let lastError = null;
-
   for (const modelName of MODELS) {
     try {
       console.log(`🤖 Trying: ${modelName}`);
@@ -77,43 +126,58 @@ async function tryStream(history, message) {
       throw err;
     }
   }
-
   throw lastError || new Error("All models failed. Please try again later.");
 }
 
-//  Middleware
+// Middleware
 app.use(helmet({ contentSecurityPolicy: false }));
 app.use(cors({ origin: "*", methods: ["GET", "POST", "DELETE"] }));
 app.use(express.json({ limit: "10mb" }));
 app.use(rateLimit({ windowMs: 60 * 1000, max: 100 }));
 
-//  Session Store
-const sessions = new Map();
-
 function getOrCreateSession(sessionId) {
   if (!sessions.has(sessionId)) {
-    sessions.set(sessionId, {
+    const session = {
       id: sessionId,
       title: "New conversation",
       messages: [],
-      createdAt: new Date(),
-      updatedAt: new Date(),
-    });
+      createdAt: new Date().toISOString(),
+      updatedAt: new Date().toISOString(),
+    };
+    sessions.set(sessionId, session);
+    scheduleSave();
   }
   return sessions.get(sessionId);
 }
 
 setInterval(
   () => {
-    const cutoff = Date.now() - 2 * 60 * 60 * 1000;
+    const cutoff = Date.now() - 30 * 24 * 60 * 60 * 1000;
+    let deleted = 0;
     for (const [id, s] of sessions.entries()) {
-      if (new Date(s.updatedAt).getTime() < cutoff) sessions.delete(id);
+      if (new Date(s.updatedAt).getTime() < cutoff) {
+        sessions.delete(id);
+        deleted++;
+      }
+    }
+    if (deleted > 0) {
+      console.log(`🧹 Cleaned up ${deleted} old sessions`);
+      saveSessions();
     }
   },
-  30 * 60 * 1000,
+  60 * 60 * 1000,
 );
 
-//  Routes
+process.on("SIGINT", () => {
+  saveSessions();
+  process.exit(0);
+});
+process.on("SIGTERM", () => {
+  saveSessions();
+  process.exit(0);
+});
+
+// Routes
 app.get("/api/health", (req, res) => {
   res.json({
     status: "ok",
@@ -121,8 +185,9 @@ app.get("/api/health", (req, res) => {
       ? `${API_KEY.slice(0, 8)}...${API_KEY.slice(-4)}`
       : "❌ MISSING",
     models: MODELS,
-    uptime: Math.floor(process.uptime()),
     sessions: sessions.size,
+    uptime: Math.floor(process.uptime()),
+    dataFile: SESSIONS_FILE,
   });
 });
 
@@ -145,6 +210,7 @@ app.get("/api/models", async (req, res) => {
 app.post("/api/sessions", (req, res) => {
   const id = uuidv4();
   const session = getOrCreateSession(id);
+  scheduleSave();
   res.json({ sessionId: session.id, title: session.title });
 });
 
@@ -169,10 +235,11 @@ app.get("/api/sessions/:id", (req, res) => {
 
 app.delete("/api/sessions/:id", (req, res) => {
   sessions.delete(req.params.id);
+  scheduleSave();
   res.json({ success: true });
 });
 
-//  Chat
+// Chat
 app.post("/api/chat", async (req, res) => {
   const { message, sessionId } = req.body;
 
@@ -201,11 +268,10 @@ app.post("/api/chat", async (req, res) => {
     id: uuidv4(),
     role: "user",
     content: message,
-    timestamp: new Date(),
+    timestamp: new Date().toISOString(),
   });
-  session.updatedAt = new Date();
+  session.updatedAt = new Date().toISOString();
 
-  // SSE headers
   res.setHeader("Content-Type", "text/event-stream");
   res.setHeader("Cache-Control", "no-cache");
   res.setHeader("Connection", "keep-alive");
@@ -239,9 +305,11 @@ app.post("/api/chat", async (req, res) => {
       id: uuidv4(),
       role: "assistant",
       content: fullText,
-      timestamp: new Date(),
+      timestamp: new Date().toISOString(),
     });
-    session.updatedAt = new Date();
+    session.updatedAt = new Date().toISOString();
+
+    scheduleSave();
 
     send("done", { sessionId: id, title: session.title });
     res.end();
@@ -256,12 +324,14 @@ app.post("/api/chat", async (req, res) => {
   }
 });
 
-//  Start
 app.listen(PORT, () => {
   console.log(`\n🚀 Server → http://localhost:${PORT}`);
   console.log(
     `🔑 API Key: ${API_KEY ? API_KEY.slice(0, 8) + "..." + API_KEY.slice(-4) : "❌ MISSING"}`,
   );
-  console.log(`🤖 Using models: ${MODELS.join(", ")}`);
-  console.log(`\n👉 Health: http://localhost:${PORT}/api/health\n`);
+  console.log(`💾 Sessions saved to: ${SESSIONS_FILE}`);
+  console.log(`📊 Sessions loaded: ${sessions.size}`);
+  console.log(
+    `🤖 Models: ${MODELS.slice(0, 3).join(", ")} + ${MODELS.length - 3} more\n`,
+  );
 });
