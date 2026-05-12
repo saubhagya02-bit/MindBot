@@ -19,7 +19,6 @@ export function ChatProvider({ children }) {
   const [sidebarOpen, setSidebarOpen] = useState(true);
   const [loadingHistory, setLoadingHistory] = useState(true);
 
-  // Load all sessions from server on app start
   useEffect(() => {
     async function fetchSessions() {
       try {
