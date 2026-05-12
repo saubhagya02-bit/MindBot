@@ -1,4 +1,10 @@
-import { createContext, useContext, useState, useCallback } from "react";
+import {
+  createContext,
+  useContext,
+  useState,
+  useCallback,
+  useEffect,
+} from "react";
 import { v4 as uuidv4 } from "uuid";
 
 const ChatContext = createContext(null);
@@ -11,6 +17,26 @@ export function ChatProvider({ children }) {
   const [streamingText, setStreamingText] = useState("");
   const [error, setError] = useState(null);
   const [sidebarOpen, setSidebarOpen] = useState(true);
+  const [loadingHistory, setLoadingHistory] = useState(true);
+
+  // Load all sessions from server on app start
+  useEffect(() => {
+    async function fetchSessions() {
+      try {
+        const res = await fetch("/api/sessions");
+        if (res.ok) {
+          const data = await res.json();
+          setSessions(data);
+          console.log(`📂 Loaded ${data.length} sessions from server`);
+        }
+      } catch (err) {
+        console.error("Could not load sessions:", err.message);
+      } finally {
+        setLoadingHistory(false);
+      }
+    }
+    fetchSessions();
+  }, []);
 
   const createSession = useCallback(() => {
     const id = uuidv4();
@@ -28,23 +54,30 @@ export function ChatProvider({ children }) {
     return id;
   }, []);
 
-  const selectSession = useCallback(async (sessionId) => {
-    setActiveSessionId(sessionId);
-    setError(null);
-    try {
-      const res = await fetch(`/api/sessions/${sessionId}`);
-      if (res.ok) {
-        const data = await res.json();
-        setMessages(data.messages || []);
-      }
-    } catch {
+  const selectSession = useCallback(
+    async (sessionId) => {
+      if (sessionId === activeSessionId) return;
+      setActiveSessionId(sessionId);
       setMessages([]);
-    }
-  }, []);
+      setError(null);
+      try {
+        const res = await fetch(`/api/sessions/${sessionId}`);
+        if (res.ok) {
+          const data = await res.json();
+          setMessages(data.messages || []);
+        }
+      } catch (err) {
+        console.error("Could not load session:", err.message);
+      }
+    },
+    [activeSessionId],
+  );
 
   const deleteSession = useCallback(
     async (sessionId) => {
-      await fetch(`/api/sessions/${sessionId}`, { method: "DELETE" });
+      try {
+        await fetch(`/api/sessions/${sessionId}`, { method: "DELETE" });
+      } catch {}
       setSessions((prev) => prev.filter((s) => s.id !== sessionId));
       if (activeSessionId === sessionId) {
         setActiveSessionId(null);
@@ -98,22 +131,19 @@ export function ChatProvider({ children }) {
       let accumulated = "";
 
       try {
-        const payload = { message: trimmed, sessionId };
-        console.log("Sending:", payload);
-
         const response = await fetch("/api/chat", {
           method: "POST",
           headers: {
             "Content-Type": "application/json",
             Accept: "text/event-stream",
           },
-          body: JSON.stringify(payload),
+          body: JSON.stringify({ message: trimmed, sessionId }),
         });
 
         console.log("Response status:", response.status, response.statusText);
 
         if (!response.ok) {
-          let errMsg = "Server error " + response.status;
+          let errMsg = `Server error ${response.status}`;
           try {
             const errData = await response.json();
             errMsg = errData.error || errMsg;
@@ -156,7 +186,7 @@ export function ChatProvider({ children }) {
                     s.id === data.sessionId
                       ? {
                           ...s,
-                          messageCount: s.messageCount + 2,
+                          messageCount: (s.messageCount || 0) + 2,
                           updatedAt: new Date().toISOString(),
                         }
                       : s,
@@ -165,7 +195,7 @@ export function ChatProvider({ children }) {
               }
 
               if (data.message && !data.text && !data.sessionId) {
-                throw new Error(data.message);
+                if (!accumulated) throw new Error(data.message);
               }
             } catch (parseErr) {
               if (
@@ -181,9 +211,7 @@ export function ChatProvider({ children }) {
         }
 
         if (!accumulated) {
-          throw new Error(
-            "No response received. The AI may be rate limited — please try again.",
-          );
+          throw new Error("No response received. Please try again.");
         }
 
         const assistantMessage = {
@@ -222,6 +250,7 @@ export function ChatProvider({ children }) {
         setError,
         sidebarOpen,
         setSidebarOpen,
+        loadingHistory,
         createSession,
         selectSession,
         deleteSession,
