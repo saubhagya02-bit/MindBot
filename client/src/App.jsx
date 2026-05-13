@@ -2,9 +2,10 @@ import { AuthProvider, useAuth } from "./context/AuthContext.jsx";
 import { ChatProvider } from "./context/ChatContext.jsx";
 import Layout from "./components/Layout.jsx";
 import AuthPage from "./components/AuthPage.jsx";
+import AuthPrompt from "./components/AuthPrompt.jsx";
 
 function AppInner() {
-  const { user, loading } = useAuth();
+  const { user, loading, guestUserId, showAuthPrompt } = useAuth();
 
   if (loading) {
     return (
@@ -16,11 +17,20 @@ function AppInner() {
     );
   }
 
-  if (!user) return <AuthPage />;
+  // Logged-in user
+  if (user) {
+    return (
+      <ChatProvider userId={user.id}>
+        <Layout />
+      </ChatProvider>
+    );
+  }
 
+  // Guest mode — can try 1 message, then auth prompt appears
   return (
-    <ChatProvider userId={user.id}>
+    <ChatProvider userId={guestUserId}>
       <Layout />
+      {showAuthPrompt && <AuthPrompt />}
     </ChatProvider>
   );
 }
