@@ -19,7 +19,6 @@ export function ChatProvider({ children, userId }) {
   const [sidebarOpen, setSidebarOpen] = useState(true);
   const [loadingHistory, setLoadingHistory] = useState(true);
 
-  // Load only THIS user's sessions on mount
   useEffect(() => {
     if (!userId) return;
     async function fetchSessions() {
