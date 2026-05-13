@@ -31,6 +31,10 @@ export function AuthProvider({ children }) {
   const [loading, setLoading] = useState(true);
   const [guestMessageCount, setGuestMessageCount] = useState(0);
   const [showAuthPrompt, setShowAuthPrompt] = useState(false);
+  const [showAccountSettings, setShowAccountSettings] = useState(false);
+  const [theme, setThemeState] = useState(
+    () => localStorage.getItem("mindbot_theme") || "dark",
+  );
 
   useEffect(() => {
     const session = getSession();
@@ -40,24 +44,27 @@ export function AuthProvider({ children }) {
     setLoading(false);
   }, []);
 
+  useEffect(() => {
+    document.documentElement.setAttribute("data-theme", theme);
+    localStorage.setItem("mindbot_theme", theme);
+  }, [theme]);
+
+  const setTheme = (t) => setThemeState(t);
+
   const incrementGuestUsage = () => {
     const next = guestMessageCount + 1;
     setGuestMessageCount(next);
     localStorage.setItem(GUEST_USAGE_KEY, String(next));
-    if (next >= GUEST_LIMIT) {
-      setTimeout(() => setShowAuthPrompt(true), 1500);
-    }
+    if (next >= GUEST_LIMIT) setTimeout(() => setShowAuthPrompt(true), 1500);
   };
 
   const guestCanChat = guestMessageCount < GUEST_LIMIT;
-
   const guestUserId = "guest";
 
   const register = (name, email, password) => {
     const users = getUsers();
-    if (users.find((u) => u.email === email.trim().toLowerCase())) {
+    if (users.find((u) => u.email === email.trim().toLowerCase()))
       return { error: "An account with this email already exists." };
-    }
     const newUser = {
       id: uuidv4(),
       name: name.trim(),
@@ -71,7 +78,6 @@ export function AuthProvider({ children }) {
       email: newUser.email,
     };
     localStorage.setItem(SESSION_KEY, JSON.stringify(sessionUser));
-
     localStorage.removeItem(GUEST_USAGE_KEY);
     setGuestMessageCount(0);
     setShowAuthPrompt(false);
@@ -94,16 +100,48 @@ export function AuthProvider({ children }) {
     return { success: true };
   };
 
+  const updateProfile = (updates) => {
+    const users = getUsers();
+    const idx = users.findIndex((u) => u.id === user.id);
+    if (idx === -1) return { error: "User not found." };
+
+    if (updates.email && updates.email !== user.email) {
+      const emailTaken = users.find(
+        (u) =>
+          u.email === updates.email.trim().toLowerCase() && u.id !== user.id,
+      );
+      if (emailTaken) return { error: "Email already in use." };
+    }
+
+    if (updates.newPassword) {
+      if (users[idx].password !== updates.currentPassword)
+        return { error: "Current password is incorrect." };
+      updates.password = updates.newPassword;
+    }
+
+    const updated = { ...users[idx], ...updates };
+    delete updated.newPassword;
+    delete updated.currentPassword;
+    users[idx] = updated;
+    saveUsers(users);
+
+    const sessionUser = {
+      id: updated.id,
+      name: updated.name,
+      email: updated.email,
+    };
+    localStorage.setItem(SESSION_KEY, JSON.stringify(sessionUser));
+    setUser(sessionUser);
+    return { success: true };
+  };
+
   const logout = () => {
     localStorage.removeItem(SESSION_KEY);
     localStorage.removeItem(GUEST_USAGE_KEY);
     setGuestMessageCount(0);
     setShowAuthPrompt(false);
+    setShowAccountSettings(false);
     setUser(null);
-  };
-
-  const continueAsGuest = () => {
-    setShowAuthPrompt(false);
   };
 
   return (
@@ -117,11 +155,15 @@ export function AuthProvider({ children }) {
         guestLimit: GUEST_LIMIT,
         showAuthPrompt,
         setShowAuthPrompt,
+        showAccountSettings,
+        setShowAccountSettings,
+        theme,
+        setTheme,
         incrementGuestUsage,
-        continueAsGuest,
         register,
         login,
         logout,
+        updateProfile,
       }}
     >
       {children}
