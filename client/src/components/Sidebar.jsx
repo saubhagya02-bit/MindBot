@@ -9,7 +9,7 @@ import {
   Search,
   X,
   Plus,
-  LogOut,
+  Settings,
   User,
   LogIn,
 } from "lucide-react";
@@ -53,11 +53,10 @@ export default function Sidebar() {
     selectSession,
     deleteSession,
   } = useChat();
-  const { user, logout, setShowAuthPrompt } = useAuth();
+  const { user, setShowAuthPrompt, setShowAccountSettings } = useAuth();
   const [hoveredId, setHoveredId] = useState(null);
   const [deletingId, setDeletingId] = useState(null);
   const [search, setSearch] = useState("");
-  const [showUserMenu, setShowUserMenu] = useState(false);
 
   const handleDelete = async (e, id) => {
     e.stopPropagation();
@@ -121,9 +120,9 @@ export default function Sidebar() {
         </span>
       </div>
 
-      {/* Search — only for logged in users */}
+      {/* Search bar — logged in only */}
       {user && (
-        <div className="px-3 py-3">
+        <div className="px-3 pt-3">
           <div className="flex items-center gap-2 px-3 py-2 rounded-lg bg-base-800 border border-base-700 focus-within:border-gem-500/50 transition-colors">
             <Search size={13} className="text-slate-600 flex-shrink-0" />
             <input
@@ -146,7 +145,7 @@ export default function Sidebar() {
       )}
 
       {/* New chat */}
-      <div className={`px-3 ${user ? "pb-2" : "py-3"}`}>
+      <div className="px-3 py-2.5">
         <button
           onClick={createSession}
           className="w-full flex items-center gap-2 px-3 py-2 rounded-lg border border-base-700 hover:border-gem-500/40 hover:bg-base-800 text-slate-500 hover:text-slate-300 transition-all text-[12.5px] group"
@@ -159,9 +158,9 @@ export default function Sidebar() {
         </button>
       </div>
 
-      {/* Sessions list */}
+      {/* Sessions */}
       <div className="flex-1 overflow-y-auto px-3 pb-4 space-y-0.5">
-        {/* Guest state — no history */}
+        {/* Guest — no history */}
         {!user && (
           <div className="flex flex-col items-center justify-center py-10 px-4 text-center gap-3">
             <div className="w-10 h-10 rounded-xl bg-base-800 border border-base-700 flex items-center justify-center">
@@ -184,24 +183,18 @@ export default function Sidebar() {
           </div>
         )}
 
-        {/* Logged in — show history */}
         {user && loadingHistory && (
           <div className="flex items-center justify-center py-8 gap-2 text-slate-600">
             <Loader2 size={14} className="animate-spin" />
             <span className="text-xs">Loading history...</span>
           </div>
         )}
-
         {user && !loadingHistory && sessions.length === 0 && (
           <div className="flex flex-col items-center justify-center py-10 text-center">
             <MessageSquare size={20} className="text-slate-700 mb-2" />
             <div className="text-slate-600 text-xs">No conversations yet</div>
-            <div className="text-slate-700 text-xs mt-0.5">
-              Start a new chat above
-            </div>
           </div>
         )}
-
         {user &&
           !loadingHistory &&
           sessions.length > 0 &&
@@ -210,7 +203,6 @@ export default function Sidebar() {
               No results for "{search}"
             </div>
           )}
-
         {user &&
           !loadingHistory &&
           Object.entries(grouped).map(([label, items]) => {
@@ -238,49 +230,31 @@ export default function Sidebar() {
       </div>
 
       {/* Footer */}
-      <div className="px-3 py-3 border-t border-base-700/50 relative">
+      <div className="px-3 py-3 border-t border-base-700/50">
         {user ? (
-          <>
-            {showUserMenu && (
-              <div className="absolute bottom-full left-3 right-3 mb-2 bg-base-800 border border-base-700 rounded-xl overflow-hidden shadow-xl z-50">
-                <div className="px-3 py-3 border-b border-base-700">
-                  <div className="text-slate-200 text-[13px] font-medium truncate">
-                    {user.name}
-                  </div>
-                  <div className="text-slate-500 text-[11px] truncate">
-                    {user.email}
-                  </div>
-                </div>
-                <button
-                  onClick={() => {
-                    logout();
-                    setShowUserMenu(false);
-                  }}
-                  className="w-full flex items-center gap-2 px-3 py-2.5 text-red-400 hover:bg-red-500/10 text-[13px] transition-colors"
-                >
-                  <LogOut size={13} /> Sign out
-                </button>
+          /* Logged-in user button → opens account settings */
+          <button
+            onClick={() => setShowAccountSettings(true)}
+            className="w-full flex items-center gap-2.5 px-3 py-2 rounded-xl bg-base-800/60 border border-base-700/40 hover:bg-base-800 hover:border-base-600 transition-all group"
+          >
+            <div className="w-7 h-7 rounded-lg bg-gradient-to-br from-gem-400 to-accent-purple flex items-center justify-center flex-shrink-0 text-white text-[11px] font-bold">
+              {user.name?.charAt(0)?.toUpperCase()}
+            </div>
+            <div className="flex-1 min-w-0 text-left">
+              <div className="text-[12px] text-slate-300 font-medium truncate">
+                {user.name}
               </div>
-            )}
-            <button
-              onClick={() => setShowUserMenu((v) => !v)}
-              className="w-full flex items-center gap-2.5 px-3 py-2 rounded-xl bg-base-800/60 border border-base-700/40 hover:bg-base-800 transition-all"
-            >
-              <div className="w-7 h-7 rounded-lg bg-gradient-to-br from-gem-400 to-accent-purple flex items-center justify-center flex-shrink-0 text-white text-[11px] font-bold">
-                {user.name?.charAt(0)?.toUpperCase()}
+              <div className="text-[10px] text-slate-600">
+                {sessions.length} chats saved
               </div>
-              <div className="flex-1 min-w-0 text-left">
-                <div className="text-[12px] text-slate-300 font-medium truncate">
-                  {user.name}
-                </div>
-                <div className="text-[10px] text-slate-600">
-                  {sessions.length} chats saved
-                </div>
-              </div>
-              <div className="w-2 h-2 rounded-full bg-emerald-500 flex-shrink-0" />
-            </button>
-          </>
+            </div>
+            <Settings
+              size={13}
+              className="text-slate-600 group-hover:text-slate-400 transition-colors flex-shrink-0"
+            />
+          </button>
         ) : (
+          /* Guest sign up button */
           <button
             onClick={() => setShowAuthPrompt(true)}
             className="w-full flex items-center gap-2.5 px-3 py-2 rounded-xl bg-gem-500/10 border border-gem-500/20 hover:bg-gem-500/20 transition-all"
