@@ -11,6 +11,7 @@ import {
   Plus,
   LogOut,
   User,
+  LogIn,
 } from "lucide-react";
 import { useChat } from "../context/ChatContext.jsx";
 import { useAuth } from "../context/AuthContext.jsx";
@@ -24,7 +25,6 @@ function groupSessionsByDate(sessions) {
   lastWeek.setDate(lastWeek.getDate() - 7);
   const lastMonth = new Date(today);
   lastMonth.setDate(lastMonth.getDate() - 30);
-
   const groups = {
     Today: [],
     Yesterday: [],
@@ -53,7 +53,7 @@ export default function Sidebar() {
     selectSession,
     deleteSession,
   } = useChat();
-  const { user, logout } = useAuth();
+  const { user, logout, setShowAuthPrompt } = useAuth();
   const [hoveredId, setHoveredId] = useState(null);
   const [deletingId, setDeletingId] = useState(null);
   const [search, setSearch] = useState("");
@@ -121,30 +121,32 @@ export default function Sidebar() {
         </span>
       </div>
 
-      {/* Search bar */}
-      <div className="px-3 py-3">
-        <div className="flex items-center gap-2 px-3 py-2 rounded-lg bg-base-800 border border-base-700 focus-within:border-gem-500/50 transition-colors">
-          <Search size={13} className="text-slate-600 flex-shrink-0" />
-          <input
-            type="text"
-            value={search}
-            onChange={(e) => setSearch(e.target.value)}
-            placeholder="Search conversations..."
-            className="flex-1 bg-transparent text-slate-300 text-[12.5px] outline-none placeholder-slate-600"
-          />
-          {search && (
-            <button
-              onClick={() => setSearch("")}
-              className="text-slate-600 hover:text-slate-400"
-            >
-              <X size={12} />
-            </button>
-          )}
+      {/* Search — only for logged in users */}
+      {user && (
+        <div className="px-3 py-3">
+          <div className="flex items-center gap-2 px-3 py-2 rounded-lg bg-base-800 border border-base-700 focus-within:border-gem-500/50 transition-colors">
+            <Search size={13} className="text-slate-600 flex-shrink-0" />
+            <input
+              type="text"
+              value={search}
+              onChange={(e) => setSearch(e.target.value)}
+              placeholder="Search conversations..."
+              className="flex-1 bg-transparent text-slate-300 text-[12.5px] outline-none placeholder-slate-600"
+            />
+            {search && (
+              <button
+                onClick={() => setSearch("")}
+                className="text-slate-600 hover:text-slate-400"
+              >
+                <X size={12} />
+              </button>
+            )}
+          </div>
         </div>
-      </div>
+      )}
 
-      {/* New chat button*/}
-      <div className="px-3 pb-2">
+      {/* New chat */}
+      <div className={`px-3 ${user ? "pb-2" : "py-3"}`}>
         <button
           onClick={createSession}
           className="w-full flex items-center gap-2 px-3 py-2 rounded-lg border border-base-700 hover:border-gem-500/40 hover:bg-base-800 text-slate-500 hover:text-slate-300 transition-all text-[12.5px] group"
@@ -157,16 +159,40 @@ export default function Sidebar() {
         </button>
       </div>
 
-      {/* Sessions */}
+      {/* Sessions list */}
       <div className="flex-1 overflow-y-auto px-3 pb-4 space-y-0.5">
-        {loadingHistory && (
+        {/* Guest state — no history */}
+        {!user && (
+          <div className="flex flex-col items-center justify-center py-10 px-4 text-center gap-3">
+            <div className="w-10 h-10 rounded-xl bg-base-800 border border-base-700 flex items-center justify-center">
+              <LogIn size={16} className="text-slate-600" />
+            </div>
+            <div>
+              <div className="text-slate-500 text-xs font-medium">
+                Sign in to see history
+              </div>
+              <div className="text-slate-700 text-xs mt-0.5">
+                Your chats are saved across sessions
+              </div>
+            </div>
+            <button
+              onClick={() => setShowAuthPrompt(true)}
+              className="px-4 py-2 bg-gem-500/15 hover:bg-gem-500/25 border border-gem-500/30 text-gem-400 rounded-lg text-xs font-medium transition-all"
+            >
+              Sign up free
+            </button>
+          </div>
+        )}
+
+        {/* Logged in — show history */}
+        {user && loadingHistory && (
           <div className="flex items-center justify-center py-8 gap-2 text-slate-600">
             <Loader2 size={14} className="animate-spin" />
             <span className="text-xs">Loading history...</span>
           </div>
         )}
 
-        {!loadingHistory && sessions.length === 0 && (
+        {user && !loadingHistory && sessions.length === 0 && (
           <div className="flex flex-col items-center justify-center py-10 text-center">
             <MessageSquare size={20} className="text-slate-700 mb-2" />
             <div className="text-slate-600 text-xs">No conversations yet</div>
@@ -176,13 +202,17 @@ export default function Sidebar() {
           </div>
         )}
 
-        {!loadingHistory && sessions.length > 0 && filtered.length === 0 && (
-          <div className="text-center py-6 text-slate-600 text-xs">
-            No results for "{search}"
-          </div>
-        )}
+        {user &&
+          !loadingHistory &&
+          sessions.length > 0 &&
+          filtered.length === 0 && (
+            <div className="text-center py-6 text-slate-600 text-xs">
+              No results for "{search}"
+            </div>
+          )}
 
-        {!loadingHistory &&
+        {user &&
+          !loadingHistory &&
           Object.entries(grouped).map(([label, items]) => {
             if (!items.length) return null;
             return (
@@ -207,48 +237,67 @@ export default function Sidebar() {
           })}
       </div>
 
-      {/* User account footer */}
+      {/* Footer */}
       <div className="px-3 py-3 border-t border-base-700/50 relative">
-        {showUserMenu && (
-          <div className="absolute bottom-full left-3 right-3 mb-2 bg-base-800 border border-base-700 rounded-xl overflow-hidden shadow-xl z-50">
-            <div className="px-3 py-3 border-b border-base-700">
-              <div className="text-slate-200 text-[13px] font-medium truncate">
-                {user?.name || "User"}
+        {user ? (
+          <>
+            {showUserMenu && (
+              <div className="absolute bottom-full left-3 right-3 mb-2 bg-base-800 border border-base-700 rounded-xl overflow-hidden shadow-xl z-50">
+                <div className="px-3 py-3 border-b border-base-700">
+                  <div className="text-slate-200 text-[13px] font-medium truncate">
+                    {user.name}
+                  </div>
+                  <div className="text-slate-500 text-[11px] truncate">
+                    {user.email}
+                  </div>
+                </div>
+                <button
+                  onClick={() => {
+                    logout();
+                    setShowUserMenu(false);
+                  }}
+                  className="w-full flex items-center gap-2 px-3 py-2.5 text-red-400 hover:bg-red-500/10 text-[13px] transition-colors"
+                >
+                  <LogOut size={13} /> Sign out
+                </button>
               </div>
-              <div className="text-slate-500 text-[11px] truncate">
-                {user?.email || ""}
-              </div>
-            </div>
+            )}
             <button
-              onClick={() => {
-                logout();
-                setShowUserMenu(false);
-              }}
-              className="w-full flex items-center gap-2 px-3 py-2.5 text-red-400 hover:bg-red-500/10 text-[13px] transition-colors"
+              onClick={() => setShowUserMenu((v) => !v)}
+              className="w-full flex items-center gap-2.5 px-3 py-2 rounded-xl bg-base-800/60 border border-base-700/40 hover:bg-base-800 transition-all"
             >
-              <LogOut size={13} />
-              Sign out
+              <div className="w-7 h-7 rounded-lg bg-gradient-to-br from-gem-400 to-accent-purple flex items-center justify-center flex-shrink-0 text-white text-[11px] font-bold">
+                {user.name?.charAt(0)?.toUpperCase()}
+              </div>
+              <div className="flex-1 min-w-0 text-left">
+                <div className="text-[12px] text-slate-300 font-medium truncate">
+                  {user.name}
+                </div>
+                <div className="text-[10px] text-slate-600">
+                  {sessions.length} chats saved
+                </div>
+              </div>
+              <div className="w-2 h-2 rounded-full bg-emerald-500 flex-shrink-0" />
             </button>
-          </div>
+          </>
+        ) : (
+          <button
+            onClick={() => setShowAuthPrompt(true)}
+            className="w-full flex items-center gap-2.5 px-3 py-2 rounded-xl bg-gem-500/10 border border-gem-500/20 hover:bg-gem-500/20 transition-all"
+          >
+            <div className="w-7 h-7 rounded-lg bg-base-800 border border-base-700 flex items-center justify-center flex-shrink-0">
+              <User size={13} className="text-slate-500" />
+            </div>
+            <div className="flex-1 text-left">
+              <div className="text-[12px] text-gem-400 font-medium">
+                Sign up free
+              </div>
+              <div className="text-[10px] text-slate-600">
+                Save your chat history
+              </div>
+            </div>
+          </button>
         )}
-
-        <button
-          onClick={() => setShowUserMenu((v) => !v)}
-          className="w-full flex items-center gap-2.5 px-3 py-2 rounded-xl bg-base-800/60 border border-base-700/40 hover:border-base-600 hover:bg-base-800 transition-all group"
-        >
-          <div className="w-7 h-7 rounded-lg bg-gradient-to-br from-gem-400 to-accent-purple flex items-center justify-center flex-shrink-0 text-white text-[11px] font-bold">
-            {user?.name?.charAt(0)?.toUpperCase() || <User size={13} />}
-          </div>
-          <div className="flex-1 min-w-0 text-left">
-            <div className="text-[12px] text-slate-300 font-medium truncate">
-              {user?.name || "Account"}
-            </div>
-            <div className="text-[10px] text-slate-600 truncate">
-              {sessions.length} chats · gemini-2.5-flash
-            </div>
-          </div>
-          <div className="w-2 h-2 rounded-full bg-emerald-500 flex-shrink-0" />
-        </button>
       </div>
     </div>
   );
