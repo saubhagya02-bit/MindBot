@@ -82,5 +82,26 @@
     ],
     "createdAt": "2026-05-13T09:02:35.292Z",
     "updatedAt": "2026-05-13T09:02:46.373Z"
+  },
+  "715cbf75-549e-4ca6-a5da-0e17bfba1148": {
+    "id": "715cbf75-549e-4ca6-a5da-0e17bfba1148",
+    "userId": "1778583452032",
+    "title": "What is SE",
+    "messages": [
+      {
+        "id": "1f4a7861-b2c8-4734-b89b-a3e9ece465d7",
+        "role": "user",
+        "content": "What is SE",
+        "timestamp": "2026-05-15T07:25:41.448Z"
+      },
+      {
+        "id": "bac64c30-c672-4fcf-9fad-0a8efdcace04",
+        "role": "assistant",
+        "content": "\"SE\" is a very common abbreviation and can stand for many different things depending on the context. Here are some of the most frequent interpretations:\n\n1.  **Software Engineering:** This is a broad field of computer science that deals with the design, development, maintenance, testing, and evaluation of software. Someone in this field is often called a Software Engineer.\n2.  **Sales Engineer:** A professional who combines technical expertise with sales skills. They typically work with sales teams to explain the technical aspects of products or services to potential customers and address their technical questions.\n3.  **Special Edition:** Often used in marketing for products like movies, video games, books, or cars. A \"Special Edition\" usually means a version with extra features, unique packaging, or a limited production run.\n4.  **South East:** A geographical direction.\n5.  **Standard Edition:** In contrast to \"Special Edition\" or \"Deluxe Edition,\" this refers to the most basic version of a product, often software or a video game, without any extra content or features.\n6.  **iPhone SE:** A specific model line of smartphones produced by Apple, combining newer internal components with the design of older iPhone models.\n7.  **Self-Esteem:** A person's overall subjective sense of personal worth or value.\n8.  **Square Enix:** A well-known Japanese video game developer and publisher, famous for franchises like Final Fantasy and Dragon Quest.\n9.  **Search Engine:** Less commonly abbreviated as just \"SE,\" but it refers to a software system that is designed to carry out web searches (e.g., Google, Bing).\n10. **State/State-level:** Sometimes used in a political or governmental context, referring to things at a state level (e.g., \"SE government\").\n\nTo know exactly what \"SE\" means in a particular instance, you would need more **context**.",
+        "timestamp": "2026-05-15T07:25:49.788Z"
+      }
+    ],
+    "createdAt": "2026-05-15T07:25:41.432Z",
+    "updatedAt": "2026-05-15T07:25:49.788Z"
   }
 }
