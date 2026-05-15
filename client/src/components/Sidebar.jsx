@@ -76,19 +76,32 @@ export default function Sidebar() {
 
   const SessionItem = ({ session }) => (
     <div
-      className={`group flex items-center gap-2.5 px-3 py-2 rounded-lg cursor-pointer transition-all duration-150 ${
-        session.id === activeSessionId
-          ? "bg-base-600 text-slate-100"
-          : "text-slate-400 hover:bg-base-700 hover:text-slate-200"
-      }`}
+      className={`group flex items-center gap-2.5 px-3 py-2 rounded-lg cursor-pointer transition-all duration-150`}
+      style={{
+        background:
+          session.id === activeSessionId ? "var(--bg-600)" : "transparent",
+        color:
+          session.id === activeSessionId ? "var(--text)" : "var(--text-muted)",
+      }}
       onClick={() => selectSession(session.id)}
-      onMouseEnter={() => setHoveredId(session.id)}
-      onMouseLeave={() => setHoveredId(null)}
+      onMouseEnter={(e) => {
+        if (session.id !== activeSessionId)
+          e.currentTarget.style.background = "var(--bg-700)";
+        setHoveredId(session.id);
+      }}
+      onMouseLeave={(e) => {
+        if (session.id !== activeSessionId)
+          e.currentTarget.style.background = "transparent";
+        setHoveredId(null);
+      }}
     >
       <MessageSquare size={13} className="flex-shrink-0 opacity-60" />
       <span className="flex-1 text-[12.5px] truncate">{session.title}</span>
       {session.messageCount > 0 && hoveredId !== session.id && (
-        <span className="text-[10px] text-slate-600 flex-shrink-0">
+        <span
+          className="text-[10px] flex-shrink-0"
+          style={{ color: "var(--text-muted)" }}
+        >
           {session.messageCount}
         </span>
       )}
@@ -96,7 +109,8 @@ export default function Sidebar() {
         <button
           onClick={(e) => handleDelete(e, session.id)}
           disabled={deletingId === session.id}
-          className="flex-shrink-0 text-slate-600 hover:text-red-400 transition-colors p-0.5 rounded"
+          className="flex-shrink-0 hover:text-red-400 transition-colors p-0.5 rounded"
+          style={{ color: "var(--text-muted)" }}
         >
           {deletingId === session.id ? (
             <Loader2 size={12} className="animate-spin" />
@@ -109,9 +123,15 @@ export default function Sidebar() {
   );
 
   return (
-    <div className="flex flex-col h-full w-64 bg-base-900 border-r border-base-700/50">
+    <div
+      className="flex flex-col h-full w-64 border-r transition-colors duration-200"
+      style={{ background: "var(--bg-900)", borderColor: "var(--border)" }}
+    >
       {/* Logo */}
-      <div className="flex items-center gap-2.5 px-4 py-4 border-b border-base-700/50">
+      <div
+        className="flex items-center gap-2.5 px-4 py-4 border-b"
+        style={{ borderColor: "var(--border)" }}
+      >
         <div className="w-7 h-7 rounded-lg bg-gradient-to-br from-gem-400 to-accent-purple flex items-center justify-center flex-shrink-0">
           <Sparkles size={14} className="text-white" />
         </div>
@@ -120,22 +140,34 @@ export default function Sidebar() {
         </span>
       </div>
 
-      {/* Search bar — logged in only */}
+      {/* Search — logged in only */}
       {user && (
         <div className="px-3 pt-3">
-          <div className="flex items-center gap-2 px-3 py-2 rounded-lg bg-base-800 border border-base-700 focus-within:border-gem-500/50 transition-colors">
-            <Search size={13} className="text-slate-600 flex-shrink-0" />
+          <div
+            className="flex items-center gap-2 px-3 py-2 rounded-lg border transition-colors"
+            style={{
+              background: "var(--bg-800)",
+              borderColor: "var(--border2)",
+            }}
+          >
+            <Search
+              size={13}
+              style={{ color: "var(--text-muted)" }}
+              className="flex-shrink-0"
+            />
             <input
               type="text"
               value={search}
               onChange={(e) => setSearch(e.target.value)}
               placeholder="Search conversations..."
-              className="flex-1 bg-transparent text-slate-300 text-[12.5px] outline-none placeholder-slate-600"
+              className="flex-1 bg-transparent text-[12.5px] outline-none"
+              style={{ color: "var(--text)" }}
             />
             {search && (
               <button
                 onClick={() => setSearch("")}
-                className="text-slate-600 hover:text-slate-400"
+                style={{ color: "var(--text-muted)" }}
+                className="hover:opacity-70"
               >
                 <X size={12} />
               </button>
@@ -148,35 +180,61 @@ export default function Sidebar() {
       <div className="px-3 py-2.5">
         <button
           onClick={createSession}
-          className="w-full flex items-center gap-2 px-3 py-2 rounded-lg border border-base-700 hover:border-gem-500/40 hover:bg-base-800 text-slate-500 hover:text-slate-300 transition-all text-[12.5px] group"
+          className="w-full flex items-center gap-2 px-3 py-2 rounded-lg border transition-all text-[12.5px] group"
+          style={{
+            borderColor: "var(--border2)",
+            color: "var(--text-muted)",
+            background: "transparent",
+          }}
+          onMouseEnter={(e) => {
+            e.currentTarget.style.background = "var(--bg-800)";
+            e.currentTarget.style.color = "var(--text)";
+          }}
+          onMouseLeave={(e) => {
+            e.currentTarget.style.background = "transparent";
+            e.currentTarget.style.color = "var(--text-muted)";
+          }}
         >
-          <Plus
-            size={13}
-            className="group-hover:text-gem-400 transition-colors"
-          />
+          <Plus size={13} />
           New conversation
         </button>
       </div>
 
-      {/* Sessions */}
       <div className="flex-1 overflow-y-auto px-3 pb-4 space-y-0.5">
         {/* Guest — no history */}
         {!user && (
           <div className="flex flex-col items-center justify-center py-10 px-4 text-center gap-3">
-            <div className="w-10 h-10 rounded-xl bg-base-800 border border-base-700 flex items-center justify-center">
-              <LogIn size={16} className="text-slate-600" />
+            <div
+              className="w-10 h-10 rounded-xl border flex items-center justify-center"
+              style={{
+                background: "var(--bg-800)",
+                borderColor: "var(--border2)",
+              }}
+            >
+              <LogIn size={16} style={{ color: "var(--text-muted)" }} />
             </div>
             <div>
-              <div className="text-slate-500 text-xs font-medium">
+              <div
+                className="text-xs font-medium"
+                style={{ color: "var(--text-muted)" }}
+              >
                 Sign in to see history
               </div>
-              <div className="text-slate-700 text-xs mt-0.5">
+              <div
+                className="text-xs mt-0.5"
+                style={{ color: "var(--border2)" }}
+              >
                 Your chats are saved across sessions
               </div>
             </div>
             <button
               onClick={() => setShowAuthPrompt(true)}
-              className="px-4 py-2 bg-gem-500/15 hover:bg-gem-500/25 border border-gem-500/30 text-gem-400 rounded-lg text-xs font-medium transition-all"
+              className="px-4 py-2 rounded-lg text-xs font-medium transition-all"
+              style={{
+                background: "var(--accent,#4f8ef7)22",
+                border: "1px solid var(--accent,#4f8ef7)44",
+                color: "var(--accent,#4f8ef7)",
+              }}
             >
               Sign up free
             </button>
@@ -184,25 +242,40 @@ export default function Sidebar() {
         )}
 
         {user && loadingHistory && (
-          <div className="flex items-center justify-center py-8 gap-2 text-slate-600">
+          <div
+            className="flex items-center justify-center py-8 gap-2"
+            style={{ color: "var(--text-muted)" }}
+          >
             <Loader2 size={14} className="animate-spin" />
             <span className="text-xs">Loading history...</span>
           </div>
         )}
+
         {user && !loadingHistory && sessions.length === 0 && (
           <div className="flex flex-col items-center justify-center py-10 text-center">
-            <MessageSquare size={20} className="text-slate-700 mb-2" />
-            <div className="text-slate-600 text-xs">No conversations yet</div>
+            <MessageSquare
+              size={20}
+              className="mb-2"
+              style={{ color: "var(--border2)" }}
+            />
+            <div className="text-xs" style={{ color: "var(--text-muted)" }}>
+              No conversations yet
+            </div>
           </div>
         )}
+
         {user &&
           !loadingHistory &&
           sessions.length > 0 &&
           filtered.length === 0 && (
-            <div className="text-center py-6 text-slate-600 text-xs">
+            <div
+              className="text-center py-6 text-xs"
+              style={{ color: "var(--text-muted)" }}
+            >
               No results for "{search}"
             </div>
           )}
+
         {user &&
           !loadingHistory &&
           Object.entries(grouped).map(([label, items]) => {
@@ -211,11 +284,14 @@ export default function Sidebar() {
               <div key={label}>
                 <div className="flex items-center gap-1.5 px-2 pt-3 pb-1.5">
                   {label === "Today" ? (
-                    <Clock size={9} className="text-slate-700" />
+                    <Clock size={9} style={{ color: "var(--border2)" }} />
                   ) : (
-                    <Calendar size={9} className="text-slate-700" />
+                    <Calendar size={9} style={{ color: "var(--border2)" }} />
                   )}
-                  <span className="text-[10px] font-medium text-slate-700 uppercase tracking-widest">
+                  <span
+                    className="text-[10px] font-medium uppercase tracking-widest"
+                    style={{ color: "var(--border2)" }}
+                  >
                     {label}
                   </span>
                 </div>
@@ -230,43 +306,80 @@ export default function Sidebar() {
       </div>
 
       {/* Footer */}
-      <div className="px-3 py-3 border-t border-base-700/50">
+      <div
+        className="px-3 py-3 border-t"
+        style={{ borderColor: "var(--border)" }}
+      >
         {user ? (
-          /* Logged-in user button → opens account settings */
           <button
             onClick={() => setShowAccountSettings(true)}
-            className="w-full flex items-center gap-2.5 px-3 py-2 rounded-xl bg-base-800/60 border border-base-700/40 hover:bg-base-800 hover:border-base-600 transition-all group"
+            className="w-full flex items-center gap-2.5 px-3 py-2.5 rounded-xl border transition-all group"
+            style={{
+              background: "var(--bg-800)",
+              borderColor: "var(--border2)",
+            }}
+            onMouseEnter={(e) =>
+              (e.currentTarget.style.borderColor = "var(--accent,#4f8ef7)55")
+            }
+            onMouseLeave={(e) =>
+              (e.currentTarget.style.borderColor = "var(--border2)")
+            }
           >
-            <div className="w-7 h-7 rounded-lg bg-gradient-to-br from-gem-400 to-accent-purple flex items-center justify-center flex-shrink-0 text-white text-[11px] font-bold">
+            {/* Avatar */}
+            <div className="w-8 h-8 rounded-lg bg-gradient-to-br from-gem-400 to-accent-purple flex items-center justify-center flex-shrink-0 text-white text-[12px] font-bold">
               {user.name?.charAt(0)?.toUpperCase()}
             </div>
+
             <div className="flex-1 min-w-0 text-left">
-              <div className="text-[12px] text-slate-300 font-medium truncate">
+              <div
+                className="text-[12.5px] font-semibold truncate"
+                style={{ color: "var(--text)" }}
+              >
                 {user.name}
               </div>
-              <div className="text-[10px] text-slate-600">
+              <div
+                className="text-[10px]"
+                style={{ color: "var(--text-muted)" }}
+              >
                 {sessions.length} chats saved
               </div>
             </div>
+            {/* Settings icon */}
             <Settings
-              size={13}
-              className="text-slate-600 group-hover:text-slate-400 transition-colors flex-shrink-0"
+              size={14}
+              style={{ color: "var(--text-muted)" }}
+              className="flex-shrink-0 group-hover:rotate-45 transition-transform duration-300"
             />
           </button>
         ) : (
-          /* Guest sign up button */
           <button
             onClick={() => setShowAuthPrompt(true)}
-            className="w-full flex items-center gap-2.5 px-3 py-2 rounded-xl bg-gem-500/10 border border-gem-500/20 hover:bg-gem-500/20 transition-all"
+            className="w-full flex items-center gap-2.5 px-3 py-2 rounded-xl border transition-all"
+            style={{
+              background: "var(--accent,#4f8ef7)11",
+              borderColor: "var(--accent,#4f8ef7)33",
+            }}
           >
-            <div className="w-7 h-7 rounded-lg bg-base-800 border border-base-700 flex items-center justify-center flex-shrink-0">
-              <User size={13} className="text-slate-500" />
+            <div
+              className="w-7 h-7 rounded-lg border flex items-center justify-center flex-shrink-0"
+              style={{
+                background: "var(--bg-800)",
+                borderColor: "var(--border2)",
+              }}
+            >
+              <User size={13} style={{ color: "var(--text-muted)" }} />
             </div>
             <div className="flex-1 text-left">
-              <div className="text-[12px] text-gem-400 font-medium">
+              <div
+                className="text-[12px] font-medium"
+                style={{ color: "var(--accent,#4f8ef7)" }}
+              >
                 Sign up free
               </div>
-              <div className="text-[10px] text-slate-600">
+              <div
+                className="text-[10px]"
+                style={{ color: "var(--text-muted)" }}
+              >
                 Save your chat history
               </div>
             </div>
