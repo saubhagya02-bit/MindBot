@@ -19,8 +19,21 @@ export function ChatProvider({ children, userId }) {
   const [sidebarOpen, setSidebarOpen] = useState(true);
   const [loadingHistory, setLoadingHistory] = useState(true);
 
+  // Reset everything when userId changes (logout/login)
   useEffect(() => {
-    if (!userId) return;
+    setSessions([]);
+    setActiveSessionId(null);
+    setMessages([]);
+    setError(null);
+    setStreamingText("");
+    setIsStreaming(false);
+    setLoadingHistory(true);
+
+    if (!userId) {
+      setLoadingHistory(false);
+      return;
+    }
+
     async function fetchSessions() {
       try {
         const res = await fetch(`/api/sessions?userId=${userId}`);
@@ -35,19 +48,21 @@ export function ChatProvider({ children, userId }) {
       }
     }
     fetchSessions();
-  }, [userId]);
+  }, [userId]); // re-runs every time userId changes
 
   const createSession = useCallback(() => {
     const id = uuidv4();
-    const session = {
-      id,
-      userId,
-      title: "New conversation",
-      createdAt: new Date().toISOString(),
-      updatedAt: new Date().toISOString(),
-      messageCount: 0,
-    };
-    setSessions((prev) => [session, ...prev]);
+    setSessions((prev) => [
+      {
+        id,
+        userId,
+        title: "New conversation",
+        createdAt: new Date().toISOString(),
+        updatedAt: new Date().toISOString(),
+        messageCount: 0,
+      },
+      ...prev,
+    ]);
     setActiveSessionId(id);
     setMessages([]);
     setError(null);
@@ -107,15 +122,17 @@ export function ChatProvider({ children, userId }) {
       let sessionId = activeSessionId;
       if (!sessionId) {
         sessionId = uuidv4();
-        const session = {
-          id: sessionId,
-          userId,
-          title: trimmed.slice(0, 50) + (trimmed.length > 50 ? "..." : ""),
-          createdAt: new Date().toISOString(),
-          updatedAt: new Date().toISOString(),
-          messageCount: 0,
-        };
-        setSessions((prev) => [session, ...prev]);
+        setSessions((prev) => [
+          {
+            id: sessionId,
+            userId,
+            title: trimmed.slice(0, 50) + (trimmed.length > 50 ? "..." : ""),
+            createdAt: new Date().toISOString(),
+            updatedAt: new Date().toISOString(),
+            messageCount: 0,
+          },
+          ...prev,
+        ]);
         setActiveSessionId(sessionId);
       }
 
@@ -125,14 +142,12 @@ export function ChatProvider({ children, userId }) {
         content: trimmed,
         timestamp: new Date().toISOString(),
       };
-
       setMessages((prev) => [...prev, userMessage]);
       setIsStreaming(true);
       setStreamingText("");
       setError(null);
 
       let accumulated = "";
-
       try {
         const response = await fetch("/api/chat", {
           method: "POST",
@@ -142,7 +157,6 @@ export function ChatProvider({ children, userId }) {
           },
           body: JSON.stringify({ message: trimmed, sessionId, userId }),
         });
-
         if (!response.ok) {
           let errMsg = `Server error ${response.status}`;
           try {
@@ -151,18 +165,15 @@ export function ChatProvider({ children, userId }) {
           } catch {}
           throw new Error(errMsg);
         }
-
         const reader = response.body.getReader();
         const decoder = new TextDecoder();
         let buffer = "";
-
         while (true) {
           const { done, value } = await reader.read();
           if (done) break;
           buffer += decoder.decode(value, { stream: true });
           const lines = buffer.split("\n");
           buffer = lines.pop() ?? "";
-
           for (const line of lines) {
             const t = line.trim();
             if (!t || t.startsWith("event:")) continue;
@@ -202,10 +213,8 @@ export function ChatProvider({ children, userId }) {
             }
           }
         }
-
         if (!accumulated)
           throw new Error("No response received. Please try again.");
-
         setMessages((prev) => [
           ...prev,
           {
