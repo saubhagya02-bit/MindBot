@@ -5,7 +5,7 @@ import {
   Plus,
   AlertCircle,
   X,
-  Settings,
+  LogIn,
 } from "lucide-react";
 import { useChat } from "../context/ChatContext.jsx";
 import { useAuth } from "../context/AuthContext.jsx";
@@ -41,6 +41,7 @@ export default function ChatArea() {
       className="flex flex-col h-full transition-colors duration-200"
       style={{ background: "var(--bg-950)" }}
     >
+      {/* Topbar */}
       <header
         className="flex items-center justify-between px-4 py-3 border-b flex-shrink-0"
         style={{ background: "var(--bg-950)", borderColor: "var(--border)" }}
@@ -65,7 +66,6 @@ export default function ChatArea() {
               <PanelLeftOpen size={18} />
             )}
           </button>
-
           <span
             className="text-sm font-medium truncate max-w-xs"
             style={{ color: "var(--text-muted)" }}
@@ -94,7 +94,7 @@ export default function ChatArea() {
             <Plus size={14} /> New chat
           </button>
 
-          {/* User avatar — opens account settings */}
+          {/* User icon — account settings if logged in, sign in page if not */}
           <button
             onClick={() =>
               user ? setShowAccountSettings(true) : setShowAuthPrompt(true)
@@ -104,22 +104,30 @@ export default function ChatArea() {
               background: "var(--bg-800)",
               borderColor: "var(--border2)",
             }}
-            title={user ? `${user.name} — Account settings` : "Sign in"}
+            title={
+              user
+                ? `${user.name} — Account settings`
+                : "Sign in / Create account"
+            }
           >
             {user ? (
               <span
-                className="text-[12px] font-bold"
-                style={{ color: "var(--accent,#4f8ef7)" }}
+                style={{
+                  fontSize: "12px",
+                  fontWeight: 700,
+                  color: "var(--accent,#4f8ef7)",
+                }}
               >
                 {user.name?.charAt(0)?.toUpperCase()}
               </span>
             ) : (
-              <Settings size={14} style={{ color: "var(--text-muted)" }} />
+              <LogIn size={15} style={{ color: "var(--text-muted)" }} />
             )}
           </button>
         </div>
       </header>
 
+      {/* Error banner */}
       {error && (
         <div
           className="mx-4 mt-3 flex items-start gap-2 px-3 py-2.5 rounded-lg border flex-shrink-0"
@@ -154,6 +162,7 @@ export default function ChatArea() {
         <div ref={bottomRef} />
       </div>
 
+      {/* Input */}
       <div className="flex-shrink-0 px-4 pb-5 pt-3">
         <ChatInput />
       </div>
