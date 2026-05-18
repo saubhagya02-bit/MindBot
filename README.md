@@ -15,7 +15,7 @@ Built with React · Node.js · Tailwind CSS · Express · Docker
 
 ---
 
-![MindBot Screenshot](./screenshots/mindbot.png)
+![MindBot Screenshot](./screenshots/MindBot.png)
 
 </div>
 
