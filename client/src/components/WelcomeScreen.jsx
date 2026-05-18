@@ -50,16 +50,28 @@ export default function WelcomeScreen() {
   return (
     <div className="flex flex-col items-center justify-center min-h-full py-16 px-6 text-center">
       {/* Logo */}
-      <div className="relative mb-6">
+      <div className="relative mb-5">
         <div className="w-16 h-16 rounded-2xl bg-gradient-to-br from-gem-400 via-accent-purple to-accent-teal flex items-center justify-center shadow-2xl">
           <Sparkles size={28} className="text-white" />
         </div>
-        <div className="absolute -inset-2 rounded-2xl bg-gradient-to-br from-gem-400/20 via-accent-purple/20 to-accent-teal/20 blur-xl -z-10" />
       </div>
 
-      <h1 className="font-display text-3xl font-semibold tracking-tight mb-2">
-        <span className="gemini-gradient">Hello, I'm MindBot</span>
+      {/* Title — uses solid CSS var color so it's always visible */}
+      <h1 className="font-display text-3xl font-bold tracking-tight mb-2">
+        <span
+          style={{
+            background: "linear-gradient(120deg, #4f8ef7, #8b5cf6, #14b8a6)",
+            WebkitBackgroundClip: "text",
+            WebkitTextFillColor: "transparent",
+            backgroundClip: "text",
+            // Fallback for light mode where transparent text disappears on light bg
+            filter: "var(--gradient-text-filter, none)",
+          }}
+        >
+          Hello, I'm MindBot
+        </span>
       </h1>
+
       <p
         className="text-sm max-w-xs leading-relaxed mb-10"
         style={{ color: "var(--text-muted)" }}
@@ -74,12 +86,8 @@ export default function WelcomeScreen() {
           <button
             key={i}
             onClick={() => sendMessage(s.prompt)}
-            className="flex items-start gap-3 p-3.5 rounded-xl border text-left transition-all duration-200 cursor-pointer group"
-            style={{
-              background: `${s.color}0d`,
-              borderColor: `${s.color}33`,
-              color: "var(--text)",
-            }}
+            className="flex items-start gap-3 p-3.5 rounded-xl border text-left transition-all duration-200 cursor-pointer"
+            style={{ background: `${s.color}0d`, borderColor: `${s.color}33` }}
             onMouseEnter={(e) => {
               e.currentTarget.style.background = `${s.color}1a`;
               e.currentTarget.style.borderColor = `${s.color}66`;
@@ -93,7 +101,12 @@ export default function WelcomeScreen() {
               {s.icon}
             </div>
             <div>
-              <div className="text-[13px] font-medium">{s.title}</div>
+              <div
+                className="text-[13px] font-medium"
+                style={{ color: "var(--text)" }}
+              >
+                {s.title}
+              </div>
               <div
                 className="text-[12px] mt-0.5 leading-relaxed line-clamp-2"
                 style={{ color: "var(--text-muted)" }}
