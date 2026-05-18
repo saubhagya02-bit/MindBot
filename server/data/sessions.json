@@ -103,5 +103,38 @@
     ],
     "createdAt": "2026-05-15T07:25:41.432Z",
     "updatedAt": "2026-05-15T07:25:49.788Z"
+  },
+  "62134651-a942-4e4c-bab4-7839281c188f": {
+    "id": "62134651-a942-4e4c-bab4-7839281c188f",
+    "userId": "dd5dcf05-9ff9-44ef-b4af-8d9cfb5fdd12",
+    "title": "hi",
+    "messages": [
+      {
+        "id": "d1ff9770-a5b3-41d0-861f-78c161311686",
+        "role": "user",
+        "content": "hi",
+        "timestamp": "2026-05-18T07:41:44.047Z"
+      },
+      {
+        "id": "bbc333b3-5171-48d5-acc8-7247d5201109",
+        "role": "assistant",
+        "content": "Hello! How can I help you today?",
+        "timestamp": "2026-05-18T07:41:45.707Z"
+      },
+      {
+        "id": "ca76bd30-3304-4a6f-851c-fd54df11bc3c",
+        "role": "user",
+        "content": "fine",
+        "timestamp": "2026-05-18T07:41:57.558Z"
+      },
+      {
+        "id": "1c635059-b4f4-45ca-8cb6-95bc7f2ee30d",
+        "role": "assistant",
+        "content": "That's good to hear! What can I assist you with today?",
+        "timestamp": "2026-05-18T07:42:00.105Z"
+      }
+    ],
+    "createdAt": "2026-05-18T07:41:44.043Z",
+    "updatedAt": "2026-05-18T07:42:00.105Z"
   }
 }

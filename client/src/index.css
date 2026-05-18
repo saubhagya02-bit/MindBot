@@ -2,6 +2,7 @@
 @tailwind components;
 @tailwind utilities;
 
+/* Theme Variables */
 :root {
   --bg-950: #0b0d14;
   --bg-900: #12151f;
@@ -314,4 +315,51 @@
     opacity: 1;
     transform: translateY(0);
   }
+}
+
+[data-theme="light"] .prose-custom,
+[data-theme="light"] .prose-custom p,
+[data-theme="light"] .prose-custom li,
+[data-theme="light"] .prose-custom td {
+  color: #1e293b !important;
+}
+[data-theme="light"] .prose-custom strong,
+[data-theme="light"] .prose-custom h1,
+[data-theme="light"] .prose-custom h2,
+[data-theme="light"] .prose-custom h3 {
+  color: #0f172a !important;
+}
+[data-theme="light"] .prose-custom em {
+  color: #475569 !important;
+}
+[data-theme="light"] .prose-custom th {
+  color: #0f172a !important;
+  background: #e2e8f0 !important;
+}
+[data-theme="light"] .prose-custom blockquote {
+  color: #475569 !important;
+}
+
+/* AI bubble background in light mode must be light */
+[data-theme="light"] .message-appear > div > div[style*="--bg-800"] {
+  background: #f1f5f9 !important;
+  border-color: #e2e8f0 !important;
+}
+
+[data-theme="light"] {
+  --gradient-text-filter: drop-shadow(0 1px 2px rgba(79, 142, 247, 0.15));
+}
+
+/* Also fix the MindBot Chat logo text in sidebar for light mode */
+[data-theme="light"] .font-display {
+  text-shadow: none;
+}
+
+[data-theme="light"] h1 span[style*="WebkitTextFillColor"],
+[data-theme="light"] h1 span[style*="-webkit-text-fill-color"] {
+  -webkit-text-fill-color: transparent !important;
+  background: linear-gradient(120deg, #3b7ef4, #7c3aed, #0d9488) !important;
+  -webkit-background-clip: text !important;
+  background-clip: text !important;
+  filter: drop-shadow(0 1px 3px rgba(59, 126, 244, 0.2));
 }
