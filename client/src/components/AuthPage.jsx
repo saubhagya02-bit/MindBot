@@ -88,7 +88,7 @@ export default function AuthPage() {
                   value={form.name}
                   onChange={(e) => set("name", e.target.value)}
                   onKeyDown={handleKey}
-                  placeholder="John Doe"
+                  placeholder="Your Name"
                   className="w-full px-3.5 py-2.5 bg-base-800 border border-base-700 rounded-xl text-slate-200 text-sm outline-none placeholder-slate-600 focus:border-gem-500/60 transition-colors"
                 />
               </div>
@@ -103,7 +103,7 @@ export default function AuthPage() {
                 value={form.email}
                 onChange={(e) => set("email", e.target.value)}
                 onKeyDown={handleKey}
-                placeholder="you@example.com"
+                placeholder="example@gmail.com"
                 className="w-full px-3.5 py-2.5 bg-base-800 border border-base-700 rounded-xl text-slate-200 text-sm outline-none placeholder-slate-600 focus:border-gem-500/60 transition-colors"
               />
             </div>

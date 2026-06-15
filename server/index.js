@@ -130,7 +130,7 @@ function getOrCreateSession(sessionId, userId) {
   if (!sessions.has(sessionId)) {
     sessions.set(sessionId, {
       id: sessionId,
-      userId, // ← owner
+      userId, 
       title: "New conversation",
       messages: [],
       createdAt: new Date().toISOString(),

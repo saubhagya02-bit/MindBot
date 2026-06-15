@@ -268,7 +268,7 @@ export default function AccountSettings() {
                     label: "Email Address",
                     key: "email",
                     type: "email",
-                    placeholder: "you@example.com",
+                    placeholder: "example@gmail.com",
                   },
                 ].map((f) => (
                   <div key={f.key}>
