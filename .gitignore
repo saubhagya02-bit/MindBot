@@ -4,7 +4,5 @@ dist/
 .DS_Store
 *.log
 
-# Session storage
-sessions.json
-data/sessions.json
-*.session.json
+# Session data
+server/data/sessions.json
