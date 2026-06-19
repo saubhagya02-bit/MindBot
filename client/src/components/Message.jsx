@@ -84,29 +84,43 @@ function CodeBlock({ language, children }) {
   );
 }
 
-// Editable user message
+// User message bubble with inline edit
 function UserBubble({ message }) {
-  const { sendMessage, isStreaming } = useChat();
+  const { editAndResend, isStreaming } = useChat();
   const { user, setShowAccountSettings, setShowAuthPrompt } = useAuth();
   const [editing, setEditing] = useState(false);
   const [editText, setEditText] = useState(message.content);
   const [showActions, setShowActions] = useState(false);
   const textareaRef = useRef(null);
 
+  // Auto-focus + resize textarea when editing starts
   useEffect(() => {
     if (editing && textareaRef.current) {
-      textareaRef.current.focus();
-      textareaRef.current.style.height = "auto";
-      textareaRef.current.style.height =
-        textareaRef.current.scrollHeight + "px";
-      textareaRef.current.selectionStart = textareaRef.current.value.length;
+      const ta = textareaRef.current;
+      ta.focus();
+      ta.style.height = "auto";
+      ta.style.height = ta.scrollHeight + "px";
+
+      ta.selectionStart = ta.value.length;
+      ta.selectionEnd = ta.value.length;
     }
   }, [editing]);
 
   const handleSendEdit = () => {
     if (!editText.trim() || isStreaming) return;
-    sendMessage(editText.trim());
+    if (editText.trim() === message.content) {
+      // No change — just close editor
+      setEditing(false);
+      return;
+    }
+
+    editAndResend(message.id, editText.trim());
     setEditing(false);
+  };
+
+  const handleCancel = () => {
+    setEditing(false);
+    setEditText(message.content);
   };
 
   const handleKey = (e) => {
@@ -114,17 +128,22 @@ function UserBubble({ message }) {
       e.preventDefault();
       handleSendEdit();
     }
-    if (e.key === "Escape") {
-      setEditing(false);
-      setEditText(message.content);
-    }
+    if (e.key === "Escape") handleCancel();
+  };
+
+  const handleTextareaChange = (e) => {
+    setEditText(e.target.value);
+    e.target.style.height = "auto";
+    e.target.style.height = e.target.scrollHeight + "px";
   };
 
   return (
     <div
-      className="flex gap-3 group message-appear flex-row-reverse"
+      className="flex gap-3 message-appear flex-row-reverse"
       onMouseEnter={() => setShowActions(true)}
-      onMouseLeave={() => setShowActions(false)}
+      onMouseLeave={() => {
+        if (!editing) setShowActions(false);
+      }}
     >
       {/* Avatar */}
       <button
@@ -154,52 +173,87 @@ function UserBubble({ message }) {
       </button>
 
       <div className="flex flex-col items-end max-w-[85%]">
-        {/* Bubble */}
+        {/* Editing mode */}
         {editing ? (
           <div
             className="w-full rounded-2xl rounded-tr-sm border overflow-hidden"
             style={{
               background: "var(--bg-800)",
-              borderColor: "var(--accent,#4f8ef7)66",
+              borderColor: "var(--accent,#4f8ef7)80",
+              minWidth: "260px",
             }}
           >
             <textarea
               ref={textareaRef}
               value={editText}
-              onChange={(e) => {
-                setEditText(e.target.value);
-                e.target.style.height = "auto";
-                e.target.style.height = e.target.scrollHeight + "px";
-              }}
+              onChange={handleTextareaChange}
               onKeyDown={handleKey}
-              className="w-full bg-transparent text-sm px-4 pt-3 pb-2 outline-none resize-none leading-relaxed"
-              style={{ color: "var(--text)", minHeight: "44px" }}
+              className="w-full bg-transparent text-sm px-4 pt-3 pb-1 outline-none resize-none leading-relaxed"
+              style={{
+                color: "var(--text)",
+                minHeight: "44px",
+                maxHeight: "200px",
+                overflowY: "auto",
+              }}
             />
-            <div className="flex items-center justify-end gap-2 px-3 pb-2.5">
-              <button
-                onClick={() => {
-                  setEditing(false);
-                  setEditText(message.content);
-                }}
-                className="flex items-center gap-1 text-xs px-2.5 py-1 rounded-lg border transition-all"
-                style={{
-                  color: "var(--text-muted)",
-                  borderColor: "var(--border2)",
-                }}
+            {/* Edit action buttons */}
+            <div className="flex items-center justify-between px-3 pb-2.5 pt-1">
+              <span
+                className="text-[11px]"
+                style={{ color: "var(--text-muted)" }}
               >
-                <X size={11} /> Cancel
-              </button>
-              <button
-                onClick={handleSendEdit}
-                disabled={!editText.trim() || isStreaming}
-                className="flex items-center gap-1 text-xs px-2.5 py-1 rounded-lg text-white transition-all disabled:opacity-50"
-                style={{ background: "var(--accent,#4f8ef7)" }}
-              >
-                <CornerDownRight size={11} /> Send
-              </button>
+                <kbd
+                  style={{
+                    background: "var(--bg-700)",
+                    border: "1px solid var(--border2)",
+                    padding: "1px 4px",
+                    borderRadius: "3px",
+                    fontFamily: "monospace",
+                    fontSize: "10px",
+                  }}
+                >
+                  Enter
+                </kbd>{" "}
+                send &nbsp;·&nbsp;
+                <kbd
+                  style={{
+                    background: "var(--bg-700)",
+                    border: "1px solid var(--border2)",
+                    padding: "1px 4px",
+                    borderRadius: "3px",
+                    fontFamily: "monospace",
+                    fontSize: "10px",
+                  }}
+                >
+                  Esc
+                </kbd>{" "}
+                cancel
+              </span>
+              <div className="flex items-center gap-2">
+                <button
+                  onClick={handleCancel}
+                  className="flex items-center gap-1 text-xs px-2.5 py-1 rounded-lg border transition-all"
+                  style={{
+                    color: "var(--text-muted)",
+                    borderColor: "var(--border2)",
+                    background: "transparent",
+                  }}
+                >
+                  <X size={11} /> Cancel
+                </button>
+                <button
+                  onClick={handleSendEdit}
+                  disabled={!editText.trim() || isStreaming}
+                  className="flex items-center gap-1 text-xs px-2.5 py-1 rounded-lg text-white transition-all disabled:opacity-50"
+                  style={{ background: "var(--accent,#4f8ef7)" }}
+                >
+                  <CornerDownRight size={11} /> Send
+                </button>
+              </div>
             </div>
           </div>
         ) : (
+          /* Normal bubble */
           <div
             className="relative rounded-2xl rounded-tr-sm px-4 py-3 text-sm leading-relaxed border"
             style={{
@@ -211,10 +265,19 @@ function UserBubble({ message }) {
             <p className="whitespace-pre-wrap" style={{ color: "var(--text)" }}>
               {message.content}
             </p>
+            {/* Edited badge */}
+            {message.edited && (
+              <span
+                className="text-[10px] mt-1 block"
+                style={{ color: "var(--text-muted)" }}
+              >
+                edited
+              </span>
+            )}
           </div>
         )}
 
-        {/* Action buttons */}
+        {/* Hover action buttons — copy + edit */}
         {!editing && (
           <div
             className={`flex items-center gap-1 mt-1 transition-opacity duration-150 ${showActions ? "opacity-100" : "opacity-0"}`}
@@ -224,6 +287,7 @@ function UserBubble({ message }) {
               onClick={() => {
                 setEditing(true);
                 setEditText(message.content);
+                setShowActions(false);
               }}
               disabled={isStreaming}
               className="flex items-center gap-1 rounded transition-colors disabled:opacity-40"
@@ -248,7 +312,7 @@ function AIBubble({ message, isStreaming, isStreamingContent }) {
 
   return (
     <div
-      className="flex gap-3 group message-appear flex-row"
+      className="flex gap-3 message-appear flex-row"
       onMouseEnter={() => setShowActions(true)}
       onMouseLeave={() => setShowActions(false)}
     >
@@ -266,7 +330,7 @@ function AIBubble({ message, isStreaming, isStreamingContent }) {
             color: "var(--text)",
           }}
         >
-          {/* Typing dots */}
+          {/* Typing indicator */}
           {isStreaming && !isStreamingContent && (
             <div className="flex items-center gap-1.5 py-1">
               <div className="typing-dot" />
@@ -275,6 +339,7 @@ function AIBubble({ message, isStreaming, isStreamingContent }) {
             </div>
           )}
 
+          {/* Markdown content */}
           <div
             className={`prose-custom ${isStreamingContent ? "streaming-cursor" : ""}`}
           >
@@ -455,6 +520,7 @@ function AIBubble({ message, isStreaming, isStreamingContent }) {
   );
 }
 
+// Export
 export default function Message({
   message,
   isStreaming = false,
