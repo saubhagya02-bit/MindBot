@@ -1,6 +1,7 @@
 {
   "name": "gemini-chatbot-server",
   "version": "1.0.0",
+  "description": "MindBot Chat backend with MongoDB",
   "main": "index.js",
   "type": "module",
   "scripts": {
@@ -10,9 +11,10 @@
   "keywords": [],
   "author": "",
   "license": "ISC",
-  "description": "Node.js backend for Gemini chatbot",
   "dependencies": {
     "@google/generative-ai": "^0.24.1",
+    "bcryptjs": "^2.4.3",
+    "cookie-parser": "^1.4.7",
     "cors": "^2.8.6",
     "dotenv": "^17.4.2",
     "express": "^5.2.1",
@@ -20,9 +22,14 @@
     "express-session": "^1.19.0",
     "fs-extra": "^11.3.5",
     "helmet": "^8.1.0",
+    "jsonwebtoken": "^9.0.3",
+    "mongoose": "^8.24.0",
     "rate-limiter-flexible": "^11.0.2",
     "uuid": "^14.0.0"
   },
   "start": "node index.js",
-  "dev": "nodemon index.js"
+  "dev": "nodemon index.js",
+  "devDependencies": {
+    "nodemon": "^3.1.14"
+  }
 }
