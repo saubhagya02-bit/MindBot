@@ -1,16 +1,17 @@
 <div align="center">
-  
+
 # 🤖 MindBot Chat
 
 **A full-stack AI chatbot powered by Google Gemini AI**
 
-Built with React · Node.js · Tailwind CSS · Express · Docker
+Built with React · Node.js · Tailwind CSS · Express · MongoDB · Docker
 
 [![MIT License](https://img.shields.io/badge/License-MIT-green.svg?style=flat-square)](LICENSE)
 [![Node.js](https://img.shields.io/badge/Node.js-20+-339933?style=flat-square&logo=node.js&logoColor=white)](https://nodejs.org)
 [![React](https://img.shields.io/badge/React-18-61DAFB?style=flat-square&logo=react&logoColor=black)](https://react.dev)
 [![Tailwind CSS](https://img.shields.io/badge/Tailwind-3.4-06B6D4?style=flat-square&logo=tailwindcss&logoColor=white)](https://tailwindcss.com)
 [![Google Gemini](https://img.shields.io/badge/Google-Gemini_AI-4285F4?style=flat-square&logo=google&logoColor=white)](https://ai.google.dev)
+[![MongoDB](https://img.shields.io/badge/MongoDB-8.0-47A248?style=flat-square&logo=mongodb&logoColor=white)](https://mongodb.com)
 [![Docker](https://img.shields.io/badge/Docker-Ready-2496ED?style=flat-square&logo=docker&logoColor=white)](https://docker.com)
 
 ---
@@ -24,14 +25,15 @@ Built with React · Node.js · Tailwind CSS · Express · Docker
 ## ✨ Features
 
 - 🔥 **Real-time streaming** — AI responses stream word by word via Server-Sent Events (SSE)
-- 👤 **User accounts** — Register, login, logout with per-user session isolation
+- 👤 **User accounts** — Register, login, logout with JWT authentication and bcrypt password hashing
+- 🗄️ **MongoDB database** — All users and conversations stored securely in MongoDB Atlas
 - 🆓 **Guest mode** — Try 1 free message before signing up
-- 💬 **Chat history** — Conversations saved to disk, grouped by Today / Yesterday / Last 7 days
+- 💬 **Chat history** — Conversations saved to MongoDB, grouped by Today / Yesterday / Last 7 days
 - 🔍 **Search conversations** — Filter your chat history instantly
-- ✏️ **Edit & copy messages** — Edit your sent messages or copy any response
+- ✏️ **Edit & copy messages** — Edit sent messages in place and get a fresh AI response
 - 🎨 **6 themes** — Dark, Midnight, Light, Ocean, Rose, Forest + 6 accent colors
 - 🔄 **Auto model fallback** — Tries multiple Gemini models automatically if one is rate-limited
-- 🛡️ **Rate limiting** — Built-in API abuse protection
+- 🛡️ **Security** — JWT httpOnly cookies, bcrypt hashing, rate limiting, Helmet.js headers
 - 🐳 **Docker ready** — One command to run everything in containers
 - 📱 **Responsive** — Works on desktop and mobile
 
@@ -43,13 +45,13 @@ Built with React · Node.js · Tailwind CSS · Express · Docker
 |-------|-----------|
 | **Frontend** | React 18, Vite, Tailwind CSS 3 |
 | **Backend** | Node.js, Express.js |
+| **Database** | MongoDB Atlas + Mongoose |
 | **AI** | Google Gemini API (gemini-2.5-flash) |
+| **Auth** | JWT tokens in httpOnly cookies + bcrypt |
 | **Streaming** | Server-Sent Events (SSE) |
 | **Markdown** | react-markdown + remark-gfm |
 | **Syntax Highlighting** | react-syntax-highlighter |
 | **Containerization** | Docker, Docker Compose, Nginx |
-| **Auth** | localStorage-based (client-side) |
-| **Persistence** | File-based JSON session store |
 
 ---
 
@@ -57,44 +59,52 @@ Built with React · Node.js · Tailwind CSS · Express · Docker
 
 ```
 MindBot/
-├── 📄 docker-compose.yml          # Docker orchestration
-├── 📄 LICENSE                     # MIT License
-├── 📄 .env.example                # Environment template
+├── 📄 docker-compose.yml
+├── 📄 LICENSE
+├── 📄 .env.example
 │
-├── 🖥️ server/                     # Node.js + Express backend
-│   ├── index.js                   # Main server — API, Gemini, SSE, sessions
-│   ├── Dockerfile                 # Server container
-│   ├── .dockerignore
+├── 🖥️ server/
+│   ├── index.js                   # Main server — Gemini, SSE, chat route
+│   ├── Dockerfile
 │   ├── package.json
-│   └── .env                       # Your API key (not committed)
+│   ├── .env                       # Your keys (not committed)
+│   ├── config/
+│   │   └── db.js                  # MongoDB connection
+│   ├── models/
+│   │   ├── User.js                # User schema (bcrypt password)
+│   │   └── Session.js             # Session + messages schema
+│   ├── middleware/
+│   │   └── auth.js                # JWT protect middleware
+│   └── routes/
+│       ├── auth.js                # Register, login, logout, profile
+│       └── sessions.js            # CRUD session routes
 │
-└── 🌐 client/                     # React frontend
-    ├── nginx.conf                 # Nginx config for production
-    ├── Dockerfile                 # Multi-stage build container
-    ├── .dockerignore
+└── 🌐 client/
+    ├── nginx.conf
+    ├── Dockerfile
     ├── vite.config.js
     ├── tailwind.config.js
     ├── postcss.config.js
     ├── package.json
     ├── index.html
     └── src/
-        ├── App.jsx                # Root — auth guard
+        ├── App.jsx
         ├── main.jsx
-        ├── index.css              # Tailwind + theme variables
+        ├── index.css
         ├── context/
-        │   ├── AuthContext.jsx    # Auth, theme, user accounts
+        │   ├── AuthContext.jsx    # Auth state + JWT API calls
         │   └── ChatContext.jsx    # Sessions, messages, streaming
         └── components/
-            ├── Layout.jsx         # Sidebar + chat layout
-            ├── Sidebar.jsx        # History, search, user footer
-            ├── ChatArea.jsx       # Main chat wrapper + topbar
-            ├── ChatInput.jsx      # Message input with guest lock
-            ├── MessageList.jsx    # Message renderer
-            ├── Message.jsx        # Bubbles + copy/edit actions
-            ├── WelcomeScreen.jsx  # Welcome + suggestion cards
-            ├── AuthPage.jsx       # Sign in / register page
-            ├── AuthPrompt.jsx     # Guest upgrade overlay
-            └── AccountSettings.jsx # Profile, security, themes
+            ├── Layout.jsx
+            ├── Sidebar.jsx
+            ├── ChatArea.jsx
+            ├── ChatInput.jsx
+            ├── MessageList.jsx
+            ├── Message.jsx
+            ├── WelcomeScreen.jsx
+            ├── AuthPage.jsx
+            ├── AuthPrompt.jsx
+            └── AccountSettings.jsx
 ```
 
 ---
@@ -105,6 +115,7 @@ MindBot/
 
 - [Node.js 18+](https://nodejs.org) installed
 - A free [Google Gemini API key](https://aistudio.google.com/app/apikey)
+- A free [MongoDB Atlas](https://mongodb.com/atlas) cluster
 
 ### 1. Clone the repository
 
@@ -117,25 +128,36 @@ cd mindbot-chat
 
 1. Go to → **https://aistudio.google.com/app/apikey**
 2. Sign in with your Google account
-3. Click **"Create API key"** → select **"Create new project"**
+3. Click **"Create API key"** → **"Create new project"**
 4. Copy the key
 
-### 3. Configure environment
+### 3. Get your free MongoDB URI
+
+1. Go to → **https://mongodb.com/atlas** → sign up free
+2. Create a free **M0 cluster**
+3. Create a database user (username + password)
+4. Click **Connect** → copy the connection string
+
+### 4. Configure environment
 
 ```bash
 cd server
 cp .env.example .env
 ```
 
-Open `server/.env` and add your key:
+Open `server/.env` and fill in your values:
 
 ```env
 GEMINI_API_KEY=AIzaSy_your_key_here
+MONGODB_URI=mongodb+srv://user:pass@cluster.mongodb.net/mindbot
+JWT_SECRET=your_long_random_secret_key_here
+JWT_EXPIRES_IN=30d
 PORT=5000
+NODE_ENV=development
 CLIENT_URL=http://localhost:5173
 ```
 
-### 4. Install dependencies
+### 5. Install all dependencies
 
 From the **root** of the project:
 
@@ -143,21 +165,19 @@ From the **root** of the project:
 npm run install:all
 ```
 
-### 5. Run the app
+### 6. Run the app
 
 ```bash
 npm run dev
 ```
 
-This starts both server (`:5000`) and client (`:5173`) together.
+Both server (`:5000`) and client (`:5173`) start together.
 
 Open **http://localhost:5173** 🎉
 
 ---
 
 ## 🐳 Docker Deployment
-
-The easiest way to run MindBot in production.
 
 ### Prerequisites
 
@@ -170,8 +190,11 @@ cp .env.example .env
 ```
 
 Edit `.env`:
+
 ```env
 GEMINI_API_KEY=AIzaSy_your_key_here
+MONGODB_URI=mongodb+srv://user:pass@cluster.mongodb.net/mindbot
+JWT_SECRET=your_long_random_secret_here
 ```
 
 ### 2. Build and start
@@ -185,43 +208,50 @@ Open **http://localhost** 🎉
 ### Docker commands
 
 ```bash
-# Start in background
-docker-compose up -d
-
-# Stop everything
-docker-compose down
-
-# View server logs
-docker-compose logs -f server
-
-# Restart
-docker-compose restart
-
-# Remove containers + volumes (resets all data)
-docker-compose down -v
+docker-compose up -d          # Run in background
+docker-compose down           # Stop everything
+docker-compose logs -f server # View server logs
+docker-compose restart        # Restart all containers
+docker-compose down -v        # Remove containers + volumes
 ```
 
-### What runs in Docker
+### Containers
 
 | Container | Image | Port | Purpose |
 |-----------|-------|------|---------|
 | `mindbot-server` | node:20-alpine | 5000 | Express API + Gemini |
-| `mindbot-client` | nginx:alpine | 80 | React app + API proxy |
-
-Session data is stored in a Docker **named volume** (`mindbot-data`) so it survives container restarts.
+| `mindbot-client` | nginx:alpine | 80 | React app + proxy |
 
 ---
 
 ## 📡 API Endpoints
 
+### Auth
+
+| Method | Endpoint | Description |
+|--------|----------|-------------|
+| `POST` | `/api/auth/register` | Create account |
+| `POST` | `/api/auth/login` | Login |
+| `POST` | `/api/auth/logout` | Logout (clears cookie) |
+| `GET` | `/api/auth/me` | Get current user |
+| `PUT` | `/api/auth/profile` | Update name / email / theme |
+| `PUT` | `/api/auth/password` | Change password |
+
+### Sessions
+
+| Method | Endpoint | Description |
+|--------|----------|-------------|
+| `GET` | `/api/sessions` | List user's sessions |
+| `POST` | `/api/sessions` | Create new session |
+| `GET` | `/api/sessions/:id` | Get session with messages |
+| `DELETE` | `/api/sessions/:id` | Delete a session |
+| `PATCH` | `/api/sessions/:id/title` | Rename session |
+
+### Chat
+
 | Method | Endpoint | Description |
 |--------|----------|-------------|
 | `GET` | `/api/health` | Server health check |
-| `GET` | `/api/models` | List available Gemini models |
-| `GET` | `/api/sessions?userId=` | List user's sessions |
-| `POST` | `/api/sessions` | Create new session |
-| `GET` | `/api/sessions/:id?userId=` | Get session with messages |
-| `DELETE` | `/api/sessions/:id?userId=` | Delete a session |
 | `POST` | `/api/chat` | Send message (SSE streaming) |
 
 ### Chat request body
@@ -229,34 +259,49 @@ Session data is stored in a Docker **named volume** (`mindbot-data`) so it survi
 ```json
 {
   "message": "What is JavaScript?",
-  "sessionId": "uuid-here",
-  "userId": "user-id-here"
+  "sessionId": "mongodb-object-id"
 }
 ```
 
 ### SSE events streamed back
 
 ```
-event: start   → { sessionId, model }
-event: chunk   → { text }
-event: done    → { sessionId, title }
-event: error   → { message }
+event: start  →  { sessionId, model }
+event: chunk  →  { text }
+event: done   →  { sessionId, title }
+event: error  →  { message }
 ```
 
 ---
 
 ## 🎨 Themes
 
-MindBot includes 6 built-in themes and 6 accent colors, all configurable from **Account Settings → Appearance**.
+All configurable from **Account Settings → Appearance**.
 
-| Theme | Background | Best for |
-|-------|-----------|---------|
-| Dark | `#0b0d14` | Default — easy on eyes |
-| Midnight | `#050508` | Deep dark for night use |
-| Light | `#f0f4f8` | Daytime / bright environments |
-| Ocean | `#081419` | Teal-toned dark |
+| Theme | Background | Style |
+|-------|-----------|-------|
+| Dark | `#0b0d14` | Default dark |
+| Midnight | `#050508` | Deep dark |
+| Light | `#f0f4f8` | Light mode |
+| Ocean | `#081419` | Teal dark |
 | Rose | `#120608` | Warm dark |
-| Forest | `#060e08` | Green-toned dark |
+| Forest | `#060e08` | Green dark |
+
+---
+
+## 🔑 Environment Variables
+
+### `server/.env`
+
+| Variable | Required | Description |
+|----------|----------|-------------|
+| `GEMINI_API_KEY` | ✅ | Google Gemini API key |
+| `MONGODB_URI` | ✅ | MongoDB Atlas connection string |
+| `JWT_SECRET` | ✅ | Secret key for signing JWTs |
+| `JWT_EXPIRES_IN` | No | Token expiry (default: `30d`) |
+| `PORT` | No | Server port (default: `5000`) |
+| `CLIENT_URL` | No | Frontend URL for CORS |
+| `NODE_ENV` | No | `development` or `production` |
 
 ---
 
@@ -267,35 +312,42 @@ MindBot includes 6 built-in themes and 6 accent colors, all configurable from **
 | `npm run dev` | Start server + client together |
 | `npm run server` | Start backend only |
 | `npm run client` | Start frontend only |
-| `npm run build` | Build frontend for production |
+| `npm run build` | Build client for production |
 | `npm run install:all` | Install all dependencies |
-
----
-
-## 🔑 Environment Variables
-
-### `server/.env`
-
-| Variable | Required | Description |
-|----------|----------|-------------|
-| `GEMINI_API_KEY` | ✅ Yes | Google Gemini API key |
-| `PORT` | No | Server port (default: `5000`) |
-| `CLIENT_URL` | No | Frontend URL for CORS (default: `http://localhost:5173`) |
-| `NODE_ENV` | No | `development` or `production` |
 
 ---
 
 ## 🤖 Gemini Model Fallback
 
-MindBot automatically tries these models in order if one is unavailable or rate-limited:
+Automatically tries models in this order if one is unavailable:
 
 ```
 gemini-2.5-flash → gemini-2.0-flash → gemini-2.0-flash-lite →
 gemini-2.5-pro → gemini-2.0-flash-001 → gemini-2.5-flash-lite
 ```
 
-## 📄 License
+---
 
-This project is licensed under the **MIT License** — see the [LICENSE](LICENSE) file for details.
+## 🙌 Contributing
+
+1. Fork the repo
+2. Create a branch: `git checkout -b feature/my-feature`
+3. Commit: `git commit -m "Add my feature"`
+4. Push: `git push origin feature/my-feature`
+5. Open a Pull Request
 
 ---
+
+## 📄 License
+
+Licensed under the **MIT License** — see [LICENSE](LICENSE) for details.
+
+---
+
+<div align="center">
+
+Made with ❤️ using Google Gemini AI + MongoDB
+
+⭐ Star this repo if you found it helpful!
+
+</div>
