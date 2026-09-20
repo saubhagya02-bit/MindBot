@@ -1,20 +1,24 @@
 import mongoose from "mongoose";
+import logger from "./logger.js";
 
 const connectDB = async () => {
   try {
     const conn = await mongoose.connect(process.env.MONGODB_URI);
-    console.log(`✅ MongoDB connected: ${conn.connection.host}`);
+
+    logger.info({ host: conn.connection.host }, "✅ MongoDB connected");
   } catch (err) {
-    console.error(`❌ MongoDB connection failed: ${err.message}`);
-    process.exit(1);
+    logger.error({ err }, "❌ MongoDB connection failed");
+
+    throw err;
   }
 };
 
-mongoose.connection.on("disconnected", () =>
-  console.log("⚠️  MongoDB disconnected"),
-);
-mongoose.connection.on("reconnected", () =>
-  console.log("✅ MongoDB reconnected"),
-);
+mongoose.connection.on("disconnected", () => {
+  logger.warn("⚠️ MongoDB disconnected");
+});
+
+mongoose.connection.on("reconnected", () => {
+  logger.info("✅ MongoDB reconnected");
+});
 
 export default connectDB;
