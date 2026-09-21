@@ -1,117 +1,69 @@
 import express from "express";
-import Session from "../models/Session.js";
 import { protect } from "../middleware/auth.js";
+import { validate, sessionTitleSchema } from "../validators/chat.validator.js";
+import {
+  getUserSessions,
+  getSessionById,
+  createSession,
+  deleteSession,
+} from "../services/session.service.js";
 
 const router = express.Router();
-
 router.use(protect);
 
-// List user's sessions
-router.get("/", async (req, res) => {
+router.get("/", async (req, res, next) => {
   try {
-    const sessions = await Session.find({ userId: req.user._id })
-      .select("title messageCount createdAt updatedAt model")
-      .sort({ updatedAt: -1 })
-      .limit(100);
-
-    res.json(
-      sessions.map((s) => ({
-        id: s._id.toString(),
-        title: s.title,
-        messageCount: s.messageCount,
-        createdAt: s.createdAt,
-        updatedAt: s.updatedAt,
-        model: s.model,
-      })),
-    );
-  } catch (err) {
-    console.error("List sessions error:", err);
-    res.status(500).json({ error: "Could not fetch sessions." });
+    res.json(await getUserSessions(req.user._id));
+  } catch (e) {
+    next(e);
   }
 });
-
-// Get single session with messages
-router.get("/:id", async (req, res) => {
+router.post("/", async (req, res, next) => {
   try {
-    const session = await Session.findOne({
-      _id: req.params.id,
-      userId: req.user._id,
-    });
-
-    if (!session) return res.status(404).json({ error: "Session not found." });
-
-    res.json({
-      id: session._id.toString(),
-      title: session.title,
-      messages: session.messages.map((m) => ({
-        id: m._id.toString(),
-        role: m.role,
-        content: m.content,
-        edited: m.edited,
-        timestamp: m.timestamp,
-      })),
-      messageCount: session.messageCount,
-      createdAt: session.createdAt,
-      updatedAt: session.updatedAt,
-    });
-  } catch (err) {
-    console.error("Get session error:", err);
-    res.status(500).json({ error: "Could not fetch session." });
+    res.status(201).json(await createSession(req.user._id));
+  } catch (e) {
+    next(e);
   }
 });
-
-// Create new session
-router.post("/", async (req, res) => {
+router.get("/:id", async (req, res, next) => {
   try {
-    const session = await Session.create({
-      userId: req.user._id,
-      title: "New conversation",
-      messages: [],
-    });
-
-    res.status(201).json({
-      id: session._id.toString(),
-      title: session.title,
-      messageCount: 0,
-      createdAt: session.createdAt,
-      updatedAt: session.updatedAt,
-    });
-  } catch (err) {
-    console.error("Create session error:", err);
-    res.status(500).json({ error: "Could not create session." });
+    res.json(await getSessionById(req.params.id, req.user._id));
+  } catch (e) {
+    next(e);
   }
 });
-
-// Delete session
-router.delete("/:id", async (req, res) => {
+router.delete("/:id", async (req, res, next) => {
   try {
-    const session = await Session.findOneAndDelete({
-      _id: req.params.id,
-      userId: req.user._id,
-    });
-
-    if (!session) return res.status(404).json({ error: "Session not found." });
+    await deleteSession(req.params.id, req.user._id);
     res.json({ success: true });
-  } catch (err) {
-    console.error("Delete session error:", err);
-    res.status(500).json({ error: "Could not delete session." });
+  } catch (e) {
+    next(e);
   }
 });
 
-// Update session title
-router.patch("/:id/title", async (req, res) => {
-  try {
-    const { title } = req.body;
-    const session = await Session.findOneAndUpdate(
-      { _id: req.params.id, userId: req.user._id },
-      { title },
-      { new: true },
-    );
-    if (!session) return res.status(404).json({ error: "Session not found." });
-    res.json({ success: true, title: session.title });
-  } catch (err) {
-    res.status(500).json({ error: "Could not update title." });
-  }
-});
+router.patch(
+  "/:id/title",
+  validate(sessionTitleSchema),
+  async (req, res, next) => {
+    try {
+      const Session = (await import("../models/Session.js")).default;
+      const s = await Session.findOneAndUpdate(
+        { _id: req.params.id, userId: req.user._id },
+        { title: req.body.title },
+        { new: true },
+      );
+      if (!s)
+        return next(
+          new (await import("../utils/AppError.js")).AppError(
+            "Session not found.",
+            404,
+          ),
+        );
+      res.json({ success: true, title: s.title });
+    } catch (e) {
+      next(e);
+    }
+  },
+);
 
 export default router;
