@@ -26,7 +26,7 @@ export default function ChatArea() {
     setSidebarOpen,
     createSession,
   } = useChat();
-  const { user, setShowAccountSettings, setShowAuthPrompt } = useAuth();
+  const { user, setShowAccountSettings, openAuthPrompt } = useAuth();
   const bottomRef = useRef(null);
 
   useEffect(() => {
@@ -94,23 +94,17 @@ export default function ChatArea() {
             <Plus size={14} /> New chat
           </button>
 
-          {/* User icon — account settings if logged in, sign in page if not */}
-          <button
-            onClick={() =>
-              user ? setShowAccountSettings(true) : setShowAuthPrompt(true)
-            }
-            className="w-8 h-8 rounded-lg border flex items-center justify-center transition-all hover:scale-105"
-            style={{
-              background: "var(--bg-800)",
-              borderColor: "var(--border2)",
-            }}
-            title={
-              user
-                ? `${user.name} — Account settings`
-                : "Sign in / Create account"
-            }
-          >
-            {user ? (
+          {user ? (
+            // Logged in: avatar opens account settings
+            <button
+              onClick={() => setShowAccountSettings(true)}
+              className="w-8 h-8 rounded-lg border flex items-center justify-center transition-all hover:scale-105"
+              style={{
+                background: "var(--bg-800)",
+                borderColor: "var(--border2)",
+              }}
+              title={`${user.name} — Account settings`}
+            >
               <span
                 style={{
                   fontSize: "12px",
@@ -120,16 +114,24 @@ export default function ChatArea() {
               >
                 {user.name?.charAt(0)?.toUpperCase()}
               </span>
-            ) : (
-              <LogIn size={15} style={{ color: "var(--text-muted)" }} />
-            )}
-          </button>
+            </button>
+          ) : (
+            // Guest: explicit Sign in button
+            <button
+              onClick={() => openAuthPrompt("login")}
+              className="flex items-center gap-1.5 text-xs font-medium px-3.5 py-1.5 rounded-lg text-white transition-all active:scale-95"
+              style={{ background: "var(--accent,#4f8ef7)" }}
+            >
+              <LogIn size={14} /> Sign in
+            </button>
+          )}
         </div>
       </header>
 
       {/* Error banner */}
       {error && (
         <div
+          role="alert"
           className="mx-4 mt-3 flex items-start gap-2 px-3 py-2.5 rounded-lg border flex-shrink-0"
           style={{
             background: "rgba(239,68,68,0.1)",
