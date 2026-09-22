@@ -1,9 +1,21 @@
-# Docker Compose 
-version: "3.9"
-
 services:
 
-  # Backend 
+  redis:
+    image: redis:7-alpine
+    container_name: mindbot-redis
+    restart: unless-stopped
+    ports:
+      - "6379:6379"
+    volumes:
+      - redis-data:/data
+    networks:
+      - mindbot-network
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
   server:
     build:
       context: ./server
@@ -11,17 +23,22 @@ services:
     container_name: mindbot-server
     restart: unless-stopped
     environment:
-      - NODE_ENV=production
-      - PORT=5000
-      - GEMINI_API_KEY=${GEMINI_API_KEY}
-      - CLIENT_URL=http://localhost
-    volumes:
-      
-      - mindbot-data:/app/data
+      NODE_ENV: production
+      PORT: 5000
+      MONGODB_URI: ${MONGODB_URI}
+      GEMINI_API_KEY: ${GEMINI_API_KEY}
+      JWT_SECRET: ${JWT_SECRET}
+      JWT_EXPIRES_IN: 30d
+      CLIENT_URL: http://localhost
+      REDIS_URI: redis://redis:6379
+      LOG_LEVEL: info
     ports:
       - "5000:5000"
     networks:
       - mindbot-network
+    depends_on:
+      redis:
+        condition: service_healthy
     healthcheck:
       test: ["CMD", "wget", "-qO-", "http://localhost:5000/api/health"]
       interval: 30s
@@ -29,7 +46,6 @@ services:
       retries: 3
       start_period: 10s
 
-  # Frontend
   client:
     build:
       context: ./client
@@ -44,12 +60,10 @@ services:
     networks:
       - mindbot-network
 
-# Volumes
 volumes:
-  mindbot-data:
+  redis-data:
     driver: local
 
-# Network
 networks:
   mindbot-network:
     driver: bridge
