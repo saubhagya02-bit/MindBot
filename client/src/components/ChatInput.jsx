@@ -1,12 +1,11 @@
 import { useState, useRef, useEffect } from "react";
-import { Send, LogIn } from "lucide-react";
+import { Send, LogIn, UserPlus } from "lucide-react";
 import { useChat } from "../context/ChatContext.jsx";
 import { useAuth } from "../context/AuthContext.jsx";
 
 export default function ChatInput() {
   const { sendMessage, isStreaming } = useChat();
-  const { user, guestCanChat, incrementGuestUsage, setShowAuthPrompt } =
-    useAuth();
+  const { user, guestCanChat, openAuthPrompt } = useAuth();
   const [text, setText] = useState("");
   const textareaRef = useRef(null);
 
@@ -21,17 +20,16 @@ export default function ChatInput() {
     textareaRef.current?.focus();
   }, []);
 
-  const handleSend = () => {
+  const handleSend = async () => {
     const trimmed = text.trim();
     if (!trimmed || isStreaming) return;
-    if (!user && !guestCanChat) {
-      setShowAuthPrompt(true);
-      return;
-    }
-    if (!user) incrementGuestUsage();
-    sendMessage(trimmed);
+
     setText("");
     if (textareaRef.current) textareaRef.current.style.height = "auto";
+
+    // sendMessage handles the guest limit and resolves to null on failure
+    const result = await sendMessage(trimmed);
+    if (!result) setText((current) => current || trimmed);
   };
 
   const handleKeyDown = (e) => {
@@ -51,19 +49,36 @@ export default function ChatInput() {
           className="text-sm text-center"
           style={{ color: "var(--text-muted)" }}
         >
-          You've used your free message. Sign up to continue chatting for free.
+          You've used your free message. Sign in or create an account to keep
+          chatting.
         </p>
-        <button
-          onClick={() => setShowAuthPrompt(true)}
-          className="flex items-center gap-2 px-5 py-2.5 rounded-xl text-sm font-medium text-white transition-all active:scale-95"
-          style={{ background: "var(--accent,#4f8ef7)" }}
-        >
-          <LogIn size={15} />
-          Create free account
-        </button>
+        <div className="flex items-center gap-2">
+          <button
+            onClick={() => openAuthPrompt("login")}
+            className="flex items-center gap-2 px-5 py-2.5 rounded-xl text-sm font-medium transition-all active:scale-95 border"
+            style={{
+              color: "var(--text)",
+              borderColor: "var(--border2)",
+              background: "var(--bg-800)",
+            }}
+          >
+            <LogIn size={15} />
+            Sign in
+          </button>
+          <button
+            onClick={() => openAuthPrompt("register")}
+            className="flex items-center gap-2 px-5 py-2.5 rounded-xl text-sm font-medium text-white transition-all active:scale-95"
+            style={{ background: "var(--accent,#4f8ef7)" }}
+          >
+            <UserPlus size={15} />
+            Create free account
+          </button>
+        </div>
       </div>
     );
   }
+
+  const canSend = text.trim() && !isStreaming && !isOverLimit;
 
   return (
     <div className="max-w-3xl mx-auto w-full">
@@ -89,18 +104,12 @@ export default function ChatInput() {
         />
         <button
           onClick={handleSend}
-          disabled={!text.trim() || isStreaming || isOverLimit}
+          disabled={!canSend}
           className="flex-shrink-0 w-8 h-8 rounded-xl flex items-center justify-center transition-all duration-150 active:scale-95"
           style={{
-            background:
-              text.trim() && !isStreaming && !isOverLimit
-                ? "var(--accent,#4f8ef7)"
-                : "var(--bg-700)",
-            color:
-              text.trim() && !isStreaming && !isOverLimit
-                ? "#fff"
-                : "var(--text-muted)",
-            cursor: !text.trim() || isStreaming ? "not-allowed" : "pointer",
+            background: canSend ? "var(--accent,#4f8ef7)" : "var(--bg-700)",
+            color: canSend ? "#fff" : "var(--text-muted)",
+            cursor: canSend ? "pointer" : "not-allowed",
           }}
         >
           <Send size={14} />
@@ -113,10 +122,17 @@ export default function ChatInput() {
             <span>
               ⚡ 1 free message ·{" "}
               <button
-                onClick={() => setShowAuthPrompt(true)}
+                onClick={() => openAuthPrompt("login")}
                 className="underline hover:opacity-80"
               >
-                Sign up for unlimited
+                Sign in
+              </button>{" "}
+              or{" "}
+              <button
+                onClick={() => openAuthPrompt("register")}
+                className="underline hover:opacity-80"
+              >
+                sign up for unlimited
               </button>
             </span>
           ) : (
