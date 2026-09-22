@@ -1,4 +1,5 @@
 import { createContext, useContext, useState, useEffect } from "react";
+import { getApiErrorMessage } from "../utils/apiError.js";
 
 const AuthContext = createContext(null);
 
@@ -33,11 +34,55 @@ function applyAccent(color) {
   `;
 }
 
+async function postJson(url, body, fallbackError) {
+  try {
+    const res = await fetch(url, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        Accept: "application/json",
+      },
+      credentials: "include",
+      body: JSON.stringify(body),
+    });
+
+    let data = {};
+    try {
+      data = await res.json();
+    } catch {
+      data = {};
+    }
+
+    if (!res.ok) {
+      return {
+        error: getApiErrorMessage(
+          data,
+          res.status === 429
+            ? "Too many attempts. Please try again later."
+            : fallbackError,
+        ),
+      };
+    }
+
+    if (!data?.user) {
+      return { error: `${fallbackError} Invalid server response.` };
+    }
+
+    return { data };
+  } catch (err) {
+    console.error("Auth request error:", err);
+    return {
+      error: "Network error. Please check your connection and try again.",
+    };
+  }
+}
+
 export function AuthProvider({ children }) {
   const [user, setUser] = useState(null);
   const [loading, setLoading] = useState(true);
   const [guestMessageCount, setGuestCount] = useState(0);
   const [showAuthPrompt, setShowAuthPrompt] = useState(false);
+  const [authPromptMode, setAuthPromptMode] = useState("register");
   const [showAccountSettings, setShowAccountSettings] = useState(false);
   const [theme, setThemeState] = useState(
     () => localStorage.getItem(THEME_KEY) || "dark",
@@ -48,7 +93,7 @@ export function AuthProvider({ children }) {
     const savedAccent = localStorage.getItem(ACCENT_KEY);
     if (savedAccent) applyAccent(savedAccent);
 
-    const used = parseInt(localStorage.getItem(GUEST_KEY) || "0");
+    const used = parseInt(localStorage.getItem(GUEST_KEY) || "0", 10);
     setGuestCount(used);
 
     fetch("/api/auth/me", { credentials: "include" })
@@ -65,56 +110,50 @@ export function AuthProvider({ children }) {
     applyTheme(t);
   };
 
+  const openAuthPrompt = (mode = "register") => {
+    setAuthPromptMode(mode);
+    setShowAuthPrompt(true);
+  };
+
   const incrementGuestUsage = () => {
     const next = guestMessageCount + 1;
     setGuestCount(next);
     localStorage.setItem(GUEST_KEY, String(next));
-    if (next >= GUEST_LIMIT) setTimeout(() => setShowAuthPrompt(true), 1500);
+    if (next >= GUEST_LIMIT) setTimeout(() => openAuthPrompt("register"), 1500);
   };
 
   const guestCanChat = guestMessageCount < GUEST_LIMIT;
   const guestUserId = "guest";
 
+  const completeAuth = (nextUser) => {
+    localStorage.removeItem(GUEST_KEY);
+    setGuestCount(0);
+    setShowAuthPrompt(false);
+    setUser(nextUser);
+  };
+
   // Register
   const register = async (name, email, password) => {
-    try {
-      const res = await fetch("/api/auth/register", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        credentials: "include",
-        body: JSON.stringify({ name, email, password }),
-      });
-      const data = await res.json();
-      if (!res.ok) return { error: data.error || "Registration failed." };
-      localStorage.removeItem(GUEST_KEY);
-      setGuestCount(0);
-      setShowAuthPrompt(false);
-      setUser(data.user);
-      return { success: true };
-    } catch {
-      return { error: "Network error. Please try again." };
-    }
+    const { data, error } = await postJson(
+      "/api/auth/register",
+      { name: name.trim(), email: email.trim(), password },
+      "Registration failed. Please try again.",
+    );
+    if (error) return { error };
+    completeAuth(data.user);
+    return { success: true, user: data.user };
   };
 
   // Login
   const login = async (email, password) => {
-    try {
-      const res = await fetch("/api/auth/login", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        credentials: "include",
-        body: JSON.stringify({ email, password }),
-      });
-      const data = await res.json();
-      if (!res.ok) return { error: data.error || "Login failed." };
-      localStorage.removeItem(GUEST_KEY);
-      setGuestCount(0);
-      setShowAuthPrompt(false);
-      setUser(data.user);
-      return { success: true };
-    } catch {
-      return { error: "Network error. Please try again." };
-    }
+    const { data, error } = await postJson(
+      "/api/auth/login",
+      { email: email.trim(), password },
+      "Login failed. Please try again.",
+    );
+    if (error) return { error };
+    completeAuth(data.user);
+    return { success: true, user: data.user };
   };
 
   // Logout
@@ -137,7 +176,7 @@ export function AuthProvider({ children }) {
         body: JSON.stringify(updates),
       });
       const data = await res.json();
-      if (!res.ok) return { error: data.error || "Update failed." };
+      if (!res.ok) return { error: getApiErrorMessage(data, "Update failed.") };
       setUser(data.user);
       return { success: true };
     } catch {
@@ -155,7 +194,8 @@ export function AuthProvider({ children }) {
         body: JSON.stringify({ currentPassword, newPassword }),
       });
       const data = await res.json();
-      if (!res.ok) return { error: data.error || "Password change failed." };
+      if (!res.ok)
+        return { error: getApiErrorMessage(data, "Password change failed.") };
       return { success: true };
     } catch {
       return { error: "Network error." };
@@ -173,6 +213,8 @@ export function AuthProvider({ children }) {
         guestLimit: GUEST_LIMIT,
         showAuthPrompt,
         setShowAuthPrompt,
+        authPromptMode,
+        openAuthPrompt,
         showAccountSettings,
         setShowAccountSettings,
         theme,

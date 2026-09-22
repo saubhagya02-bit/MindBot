@@ -17,23 +17,49 @@ export default function AuthPage() {
 
   const handleSubmit = async () => {
     setError("");
-    if (mode === "register" && !form.name.trim())
+
+    if (mode === "register" && !form.name.trim()) {
       return setError("Name is required.");
-    if (!form.email.trim()) return setError("Email is required.");
-    if (!form.password) return setError("Password is required.");
-    if (mode === "register" && form.password.length < 6)
+    }
+
+    if (!form.email.trim()) {
+      return setError("Email is required.");
+    }
+
+    if (!form.password) {
+      return setError("Password is required.");
+    }
+
+    if (mode === "register" && form.password.length < 6) {
       return setError("Password must be at least 6 characters.");
+    }
 
     setLoading(true);
-    await new Promise((r) => setTimeout(r, 400));
 
-    const result =
-      mode === "login"
-        ? login(form.email, form.password)
-        : register(form.name, form.email, form.password);
+    try {
+      const result =
+        mode === "login"
+          ? await login(form.email.trim(), form.password)
+          : await register(form.name.trim(), form.email.trim(), form.password);
 
-    if (result.error) setError(result.error);
-    setLoading(false);
+      if (result?.error) {
+        setError(result.error);
+        return;
+      }
+
+      if (!result?.success) {
+        setError(
+          mode === "login"
+            ? "Invalid email or password."
+            : "Registration failed. Please try again.",
+        );
+      }
+    } catch (err) {
+      console.error("Authentication error:", err);
+      setError("Something went wrong. Please try again.");
+    } finally {
+      setLoading(false);
+    }
   };
 
   const handleKey = (e) => {

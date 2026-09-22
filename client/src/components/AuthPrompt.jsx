@@ -2,10 +2,13 @@ import { useState } from "react";
 import { Sparkles, Eye, EyeOff, Loader2, X, MessageSquare } from "lucide-react";
 import { useAuth } from "../context/AuthContext.jsx";
 
+const EMPTY_FORM = { name: "", email: "", password: "" };
+
 export default function AuthPrompt() {
-  const { login, register, continueAsGuest, setShowAuthPrompt } = useAuth();
-  const [mode, setMode] = useState("register");
-  const [form, setForm] = useState({ name: "", email: "", password: "" });
+  const { login, register, setShowAuthPrompt, authPromptMode, guestCanChat } =
+    useAuth();
+  const [mode, setMode] = useState(authPromptMode || "register");
+  const [form, setForm] = useState(EMPTY_FORM);
   const [showPass, setShowPass] = useState(false);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
@@ -15,26 +18,60 @@ export default function AuthPrompt() {
     setError("");
   };
 
-  const handleSubmit = async () => {
+  const switchMode = (m) => {
+    setMode(m);
     setError("");
-    if (mode === "register" && !form.name.trim())
-      return setError("Name is required.");
-    if (!form.email.trim()) return setError("Email is required.");
-    if (!form.password) return setError("Password is required.");
-    if (mode === "register" && form.password.length < 6)
-      return setError("Min 6 characters.");
+    setForm(EMPTY_FORM);
+  };
 
+  const validate = () => {
+    if (mode === "register" && !form.name.trim()) return "Name is required.";
+    if (!form.email.trim()) return "Email is required.";
+    if (!form.password) return "Password is required.";
+    if (mode === "register" && form.password.length < 6)
+      return "Password must be at least 6 characters.";
+    return "";
+  };
+
+  const handleSubmit = async () => {
+    if (loading) return;
+
+    const validationError = validate();
+    if (validationError) return setError(validationError);
+
+    setError("");
     setLoading(true);
-    await new Promise((r) => setTimeout(r, 400));
-    const result =
-      mode === "login"
-        ? login(form.email, form.password)
-        : register(form.name, form.email, form.password);
-    if (result.error) {
-      setError(result.error);
+
+    try {
+      const result =
+        mode === "login"
+          ? await login(form.email, form.password)
+          : await register(form.name, form.email, form.password);
+
+      if (result?.error) {
+        setError(result.error);
+      } else if (!result?.success) {
+        setError(
+          mode === "login"
+            ? "Invalid email or password."
+            : "Registration failed. Please try again.",
+        );
+      }
+      
+    } catch (err) {
+      console.error("Authentication error:", err);
+      setError("Something went wrong. Please try again.");
+    } finally {
       setLoading(false);
     }
   };
+
+  const handleKey = (e) => {
+    if (e.key === "Enter") handleSubmit();
+  };
+
+  const inputClass =
+    "w-full px-3.5 py-2.5 bg-base-800 border border-base-700 rounded-xl text-slate-200 text-sm outline-none placeholder-slate-600 focus:border-gem-500/60 transition-colors";
 
   return (
     <div
@@ -54,19 +91,22 @@ export default function AuthPrompt() {
             <Sparkles size={22} className="text-white" />
           </div>
           <h2 className="text-lg font-display font-bold text-white">
-            Enjoying MindBot?
+            {mode === "login" ? "Welcome back" : "Enjoying MindBot?"}
           </h2>
           <p className="text-slate-500 text-sm mt-1">
-            Create a free account to unlock unlimited chats and save your
-            history.
+            {mode === "login"
+              ? "Sign in to access your saved chat history."
+              : "Create a free account to unlock unlimited chats and save your history."}
           </p>
 
-          <div className="flex items-center justify-center gap-2 mt-3 px-3 py-2 bg-gem-500/10 border border-gem-500/20 rounded-xl">
-            <MessageSquare size={13} className="text-gem-400" />
-            <span className="text-xs text-gem-400 font-medium">
-              You've used your 1 free message
-            </span>
-          </div>
+          {!guestCanChat && (
+            <div className="flex items-center justify-center gap-2 mt-3 px-3 py-2 bg-gem-500/10 border border-gem-500/20 rounded-xl">
+              <MessageSquare size={13} className="text-gem-400" />
+              <span className="text-xs text-gem-400 font-medium">
+                You've used your 1 free message
+              </span>
+            </div>
+          )}
         </div>
 
         <div className="px-6 py-5">
@@ -74,10 +114,7 @@ export default function AuthPrompt() {
             {["register", "login"].map((m) => (
               <button
                 key={m}
-                onClick={() => {
-                  setMode(m);
-                  setError("");
-                }}
+                onClick={() => switchMode(m)}
                 className={`flex-1 py-2 rounded-lg text-[13px] font-medium transition-all ${
                   mode === m
                     ? "bg-gem-500 text-white shadow-md"
@@ -99,9 +136,9 @@ export default function AuthPrompt() {
                   type="text"
                   value={form.name}
                   onChange={(e) => set("name", e.target.value)}
-                  onKeyDown={(e) => e.key === "Enter" && handleSubmit()}
+                  onKeyDown={handleKey}
                   placeholder="Your Name"
-                  className="w-full px-3.5 py-2.5 bg-base-800 border border-base-700 rounded-xl text-slate-200 text-sm outline-none placeholder-slate-600 focus:border-gem-500/60 transition-colors"
+                  className={inputClass}
                 />
               </div>
             )}
@@ -113,9 +150,9 @@ export default function AuthPrompt() {
                 type="email"
                 value={form.email}
                 onChange={(e) => set("email", e.target.value)}
-                onKeyDown={(e) => e.key === "Enter" && handleSubmit()}
+                onKeyDown={handleKey}
                 placeholder="you@example.com"
-                className="w-full px-3.5 py-2.5 bg-base-800 border border-base-700 rounded-xl text-slate-200 text-sm outline-none placeholder-slate-600 focus:border-gem-500/60 transition-colors"
+                className={inputClass}
               />
             </div>
             <div>
@@ -127,13 +164,13 @@ export default function AuthPrompt() {
                   type={showPass ? "text" : "password"}
                   value={form.password}
                   onChange={(e) => set("password", e.target.value)}
-                  onKeyDown={(e) => e.key === "Enter" && handleSubmit()}
+                  onKeyDown={handleKey}
                   placeholder={
                     mode === "register"
                       ? "At least 6 characters"
                       : "Your password"
                   }
-                  className="w-full px-3.5 py-2.5 pr-10 bg-base-800 border border-base-700 rounded-xl text-slate-200 text-sm outline-none placeholder-slate-600 focus:border-gem-500/60 transition-colors"
+                  className={`${inputClass} pr-10`}
                 />
                 <button
                   type="button"
@@ -146,7 +183,10 @@ export default function AuthPrompt() {
             </div>
 
             {error && (
-              <div className="px-3 py-2.5 bg-red-500/10 border border-red-500/20 rounded-xl text-red-400 text-xs">
+              <div
+                role="alert"
+                className="px-3 py-2.5 bg-red-500/10 border border-red-500/20 rounded-xl text-red-400 text-xs"
+              >
                 {error}
               </div>
             )}
