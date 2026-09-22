@@ -5,10 +5,16 @@ import {
   useCallback,
   useEffect,
 } from "react";
+import { useAuth } from "./AuthContext.jsx";
+import { getApiErrorMessage } from "../utils/apiError.js";
 
 const ChatContext = createContext(null);
 
+const makeTitle = (text) => text.slice(0, 50) + (text.length > 50 ? "..." : "");
+
 export function ChatProvider({ children, userId }) {
+  const { user, guestCanChat, incrementGuestUsage, openAuthPrompt } = useAuth();
+
   const [sessions, setSessions] = useState([]);
   const [activeSessionId, setActiveSessionId] = useState(null);
   const [messages, setMessages] = useState([]);
@@ -18,7 +24,7 @@ export function ChatProvider({ children, userId }) {
   const [sidebarOpen, setSidebarOpen] = useState(true);
   const [loadingHistory, setLoadingHistory] = useState(true);
 
-  // Reset + reload when user changes
+  // Reset + reload sessions when user changes
   useEffect(() => {
     setSessions([]);
     setActiveSessionId(null);
@@ -34,60 +40,93 @@ export function ChatProvider({ children, userId }) {
     }
 
     fetch("/api/sessions", { credentials: "include" })
-      .then((res) => (res.ok ? res.json() : []))
-      .then((data) => setSessions(data))
-      .catch((err) => console.error("Could not load sessions:", err))
-      .finally(() => setLoadingHistory(false));
+      .then((res) => {
+        if (!res.ok) throw new Error(`Failed to load sessions: ${res.status}`);
+        return res.json();
+      })
+      .then((data) => {
+        setSessions(Array.isArray(data) ? data : data?.data || []);
+      })
+      .catch((err) => {
+        console.error("Could not load sessions:", err);
+      })
+      .finally(() => {
+        setLoadingHistory(false);
+      });
   }, [userId]);
 
+  // Create temporary session
   const createSession = useCallback(() => {
     const tempId = `temp-${Date.now()}`;
+    const now = new Date().toISOString();
+
     setSessions((prev) => [
       {
         id: tempId,
         title: "New conversation",
-        createdAt: new Date().toISOString(),
-        updatedAt: new Date().toISOString(),
+        createdAt: now,
+        updatedAt: now,
         messageCount: 0,
       },
       ...prev,
     ]);
+
     setActiveSessionId(tempId);
     setMessages([]);
     setError(null);
+
     return tempId;
   }, []);
 
+  // Select existing session
   const selectSession = useCallback(
     async (sessionId) => {
-      if (sessionId === activeSessionId) return;
+      if (!sessionId || sessionId === activeSessionId) return;
+
       setActiveSessionId(sessionId);
       setMessages([]);
       setError(null);
+
+      // Temporary sessions don't exist on the backend
+      if (sessionId.startsWith("temp-")) return;
+
       try {
         const res = await fetch(`/api/sessions/${sessionId}`, {
           credentials: "include",
         });
-        if (res.ok) {
-          const data = await res.json();
-          setMessages(data.messages || []);
-        }
+
+        if (!res.ok) throw new Error(`Failed to load session: ${res.status}`);
+
+        const data = await res.json();
+        setMessages(data?.messages || data?.data?.messages || []);
       } catch (err) {
         console.error("Could not load session:", err);
+        setError(err.message || "Could not load conversation.");
       }
     },
     [activeSessionId],
   );
 
+  // Delete session
   const deleteSession = useCallback(
     async (sessionId) => {
+      if (!sessionId) return;
+
       try {
-        await fetch(`/api/sessions/${sessionId}`, {
-          method: "DELETE",
-          credentials: "include",
-        });
-      } catch {}
+        // Temporary sessions don't exist in MongoDB
+        if (!sessionId.startsWith("temp-")) {
+          const res = await fetch(`/api/sessions/${sessionId}`, {
+            method: "DELETE",
+            credentials: "include",
+          });
+          if (!res.ok) throw new Error(`Delete failed: ${res.status}`);
+        }
+      } catch (err) {
+        console.error("Could not delete session:", err);
+      }
+
       setSessions((prev) => prev.filter((s) => s.id !== sessionId));
+
       if (activeSessionId === sessionId) {
         setActiveSessionId(null);
         setMessages([]);
@@ -96,6 +135,7 @@ export function ChatProvider({ children, userId }) {
     [activeSessionId],
   );
 
+  // Update session title
   const updateSessionTitle = useCallback((sessionId, title) => {
     setSessions((prev) =>
       prev.map((s) =>
@@ -106,124 +146,115 @@ export function ChatProvider({ children, userId }) {
     );
   }, []);
 
-  const streamChat = useCallback(
-    async (message, sessionId) => {
-      let accumulated = "";
-      const isTemp = sessionId?.startsWith("temp-");
+  // Send chat request
+  const streamChat = useCallback(async (message, sessionId) => {
+    const trimmed = message?.trim();
+    if (!trimmed) throw new Error("Message cannot be empty.");
 
-      const response = await fetch("/api/chat", {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          Accept: "text/event-stream",
-        },
-        credentials: "include",
-        body: JSON.stringify({ message, sessionId: isTemp ? null : sessionId }),
-      });
+    // Never send temporary IDs to backend
+    const isTemp = !sessionId || sessionId.startsWith("temp-");
+    const realSessionId = isTemp ? null : sessionId;
 
-      if (!response.ok) {
-        let errMsg = `Server error ${response.status}`;
-        try {
-          const e = await response.json();
-          errMsg = e.error || errMsg;
-        } catch {}
-        throw new Error(errMsg);
+    const response = await fetch("/api/chat", {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        Accept: "application/json",
+      },
+      credentials: "include",
+      body: JSON.stringify({ message: trimmed, sessionId: realSessionId }),
+    });
+
+    // Handle HTTP errors
+    if (!response.ok) {
+      let errorMessage = `Server error ${response.status}`;
+      const raw = await response.text().catch(() => "");
+
+      try {
+        errorMessage = getApiErrorMessage(JSON.parse(raw), errorMessage);
+      } catch {
+        if (raw) errorMessage = raw;
       }
 
-      const reader = response.body.getReader();
-      const decoder = new TextDecoder();
-      let buffer = "";
+      throw new Error(errorMessage);
+    }
 
-      while (true) {
-        const { done, value } = await reader.read();
-        if (done) break;
-        buffer += decoder.decode(value, { stream: true });
-        const lines = buffer.split("\n");
-        buffer = lines.pop() ?? "";
+    const data = await response.json();
 
-        for (const line of lines) {
-          const t = line.trim();
-          if (!t || t.startsWith("event:")) continue;
-          if (!t.startsWith("data:")) continue;
-          const raw = t.slice(5).trim();
-          if (!raw || raw === "[DONE]") continue;
-          try {
-            const data = JSON.parse(raw);
-            if (typeof data.text === "string") {
-              accumulated += data.text;
-              setStreamingText(accumulated);
-            }
-            if (data.sessionId && data.title) {
-              if (isTemp) {
-                setActiveSessionId(data.sessionId);
-                setSessions((prev) =>
-                  prev.map((s) =>
-                    s.id === sessionId
-                      ? {
-                          ...s,
-                          id: data.sessionId,
-                          title: data.title,
-                          messageCount: 2,
-                          updatedAt: new Date().toISOString(),
-                        }
-                      : s,
-                  ),
-                );
-              } else {
-                updateSessionTitle(data.sessionId, data.title);
-                setSessions((prev) =>
-                  prev.map((s) =>
-                    s.id === data.sessionId
-                      ? {
-                          ...s,
-                          messageCount: (s.messageCount || 0) + 2,
-                          updatedAt: new Date().toISOString(),
-                        }
-                      : s,
-                  ),
-                );
-              }
-            }
-            if (data.message && !data.text && !data.sessionId) {
-              if (!accumulated) throw new Error(data.message);
-            }
-          } catch (pe) {
-            if (
-              pe.message &&
-              !pe.message.includes("JSON") &&
-              !pe.message.includes("Unexpected")
-            )
-              throw pe;
+    if (!data?.success) {
+      throw new Error(getApiErrorMessage(data, "Chat request failed."));
+    }
+
+    const responseMessage = data?.data?.message;
+    const returnedSessionId = data?.data?.sessionId;
+    const title = data?.data?.title || makeTitle(trimmed);
+
+    if (!responseMessage) throw new Error("No response received from the AI.");
+
+    if (returnedSessionId) {
+      setActiveSessionId(returnedSessionId);
+
+      setSessions((prev) =>
+        prev.map((session) => {
+          if (isTemp && session.id === sessionId) {
+            return {
+              ...session,
+              id: returnedSessionId,
+              title,
+              messageCount: 2,
+              updatedAt: new Date().toISOString(),
+            };
           }
-        }
-      }
+          if (!isTemp && session.id === returnedSessionId) {
+            return {
+              ...session,
+              title,
+              messageCount: (session.messageCount || 0) + 2,
+              updatedAt: new Date().toISOString(),
+            };
+          }
+          return session;
+        }),
+      );
+    }
 
-      if (!accumulated)
-        throw new Error("No response received. Please try again.");
-      return accumulated;
-    },
-    [updateSessionTitle],
-  );
+    return {
+      message: responseMessage,
+      sessionId: returnedSessionId,
+      title,
+      model: data?.data?.model,
+    };
+  }, []);
 
-  // Send new message
   const sendMessage = useCallback(
     async (content) => {
       const trimmed = content?.trim();
-      if (isStreaming || !trimmed) return;
+      if (isStreaming || !trimmed) return null;
+
+      // Guest trial gate — single place so every entry point is covered
+      if (!user && !guestCanChat) {
+        openAuthPrompt("register");
+        return null;
+      }
 
       let sessionId = activeSessionId;
+
+      // Create temporary session locally
       if (!sessionId) {
         const tempId = `temp-${Date.now()}`;
+        const now = new Date().toISOString();
+
         setSessions((prev) => [
           {
             id: tempId,
-            title: trimmed.slice(0, 50) + (trimmed.length > 50 ? "..." : ""),
-            createdAt: new Date().toISOString(),
-            updatedAt: new Date().toISOString(),
+            title: makeTitle(trimmed),
+            createdAt: now,
+            updatedAt: now,
             messageCount: 0,
           },
           ...prev,
         ]);
+
         setActiveSessionId(tempId);
         sessionId = tempId;
       }
@@ -234,36 +265,51 @@ export function ChatProvider({ children, userId }) {
         content: trimmed,
         timestamp: new Date().toISOString(),
       };
+
       setMessages((prev) => [...prev, userMessage]);
       setIsStreaming(true);
       setStreamingText("");
       setError(null);
 
-      let accumulated = "";
       try {
-        accumulated = await streamChat(trimmed, sessionId);
+        const responseData = await streamChat(trimmed, sessionId);
+
         setMessages((prev) => [
           ...prev,
           {
             id: `msg-${Date.now()}-ai`,
             role: "assistant",
-            content: accumulated,
+            content: responseData.message,
             timestamp: new Date().toISOString(),
           },
         ]);
+
+        // Only burn the free trial message once it actually succeeded
+        if (!user) incrementGuestUsage();
+
+        return responseData;
       } catch (err) {
+        console.error("sendMessage failed:", err);
         setError(err.message || "Something went wrong.");
-        if (!accumulated)
-          setMessages((prev) => prev.filter((m) => m.id !== userMessage.id));
+        setMessages((prev) => prev.filter((m) => m.id !== userMessage.id));
+        return null;
       } finally {
         setIsStreaming(false);
         setStreamingText("");
       }
     },
-    [activeSessionId, isStreaming, streamChat],
+    [
+      activeSessionId,
+      isStreaming,
+      streamChat,
+      user,
+      guestCanChat,
+      incrementGuestUsage,
+      openAuthPrompt,
+    ],
   );
 
-  // Edit existing message in place and resend
+  // Edit existing message and resend
   const editAndResend = useCallback(
     async (messageId, newContent) => {
       const trimmed = newContent?.trim();
@@ -279,29 +325,33 @@ export function ChatProvider({ children, userId }) {
         timestamp: new Date().toISOString(),
         edited: true,
       };
+      const originalMessages = messages;
 
       setMessages([...historyBefore, editedMsg]);
       setIsStreaming(true);
       setStreamingText("");
       setError(null);
 
-      const originalMessages = messages;
-      let accumulated = "";
       try {
-        accumulated = await streamChat(trimmed, activeSessionId);
+        const responseData = await streamChat(trimmed, activeSessionId);
+
         setMessages([
           ...historyBefore,
           editedMsg,
           {
             id: `msg-${Date.now()}-ai`,
             role: "assistant",
-            content: accumulated,
+            content: responseData.message,
             timestamp: new Date().toISOString(),
           },
         ]);
+
+        return responseData;
       } catch (err) {
+        console.error("editAndResend failed:", err);
         setError(err.message || "Something went wrong.");
         setMessages(originalMessages);
+        throw err;
       } finally {
         setIsStreaming(false);
         setStreamingText("");
