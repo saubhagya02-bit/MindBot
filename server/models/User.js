@@ -30,6 +30,17 @@ const userSchema = new mongoose.Schema(
       default: "dark",
     },
     accentColor: { type: String, default: "#4f8ef7" },
+    // AI preferences: tier maps to a model; provider "default" uses the AI_PROVIDER env var
+    aiTier: {
+      type: String,
+      enum: ["fast", "smart", "economy"],
+      default: "fast",
+    },
+    aiProvider: {
+      type: String,
+      enum: ["default", "gemini", "openai"],
+      default: "default",
+    },
     lastLoginAt: { type: Date, default: Date.now },
   },
   { timestamps: true },
