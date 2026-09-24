@@ -16,6 +16,10 @@ import { AppError, ERROR_CODES } from "./utils/AppError.js";
 import authRoutes from "./routes/auth.js";
 import sessionRoutes from "./routes/sessions.js";
 import chatRoutes from "./routes/chat.js";
+import usageRoutes from "./routes/usage.js";
+import aiPreferencesRoutes from "./routes/aiPreferences.js";
+import documentRoutes from "./routes/documents.js";
+import memoryRoutes from "./routes/memory.js";
 import swaggerSpec from "./config/swagger.js";
 
 // Bootstrap
@@ -49,10 +53,15 @@ app.use("/api", globalLimiter);
 // API Docs
 app.use("/api/docs", swaggerUi.serve, swaggerUi.setup(swaggerSpec));
 
-// Routes
+// Routes — ALL of these must be registered before the 404 handler below,
+// or Express will never reach them.
 app.use("/api/auth", authRoutes);
 app.use("/api/sessions", sessionRoutes);
-app.use("/api/chat", chatRoutes); 
+app.use("/api/chat", chatRoutes);
+app.use("/api/usage", usageRoutes);
+app.use("/api/ai", aiPreferencesRoutes);
+app.use("/api/documents", documentRoutes);
+app.use("/api/memory", memoryRoutes);
 
 // Health Check
 app.get("/api/health", async (req, res) => {
@@ -80,7 +89,7 @@ app.get("/api/health", async (req, res) => {
   });
 });
 
-// 404 Handler
+// 404 Handler — must stay LAST, after every real route above
 app.use((req, res, next) => {
   next(
     new AppError(
