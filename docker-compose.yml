@@ -27,11 +27,15 @@ services:
       PORT: 5000
       MONGODB_URI: ${MONGODB_URI}
       GEMINI_API_KEY: ${GEMINI_API_KEY}
+      environment:
+      AI_PROVIDER: ${AI_PROVIDER:-gemini}
+      OPENAI_API_KEY: ${OPENAI_API_KEY}
       JWT_SECRET: ${JWT_SECRET}
       JWT_EXPIRES_IN: 30d
       CLIENT_URL: http://localhost
       REDIS_URI: redis://redis:6379
       LOG_LEVEL: info
+      COOKIE_SECURE: "false"
     ports:
       - "5000:5000"
     networks:
