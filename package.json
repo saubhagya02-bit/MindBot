@@ -2,11 +2,11 @@
   "name": "mindbot",
   "version": "1.0.0",
   "main": "index.js",
-"scripts": {
-  "dev": "concurrently \"npm run server\" \"npm run client\"",
-  "server": "cd server && node index.js",
-  "client": "cd client && npm run dev"
-},
+  "scripts": {
+    "dev": "concurrently \"npm run server\" \"npm run client\"",
+    "server": "cd server && node index.js",
+    "client": "cd client && npm run dev"
+  },
   "repository": {
     "type": "git",
     "url": "git+https://github.com/saubhagya02-bit/MindBot.git"
@@ -20,6 +20,7 @@
   "homepage": "https://github.com/saubhagya02-bit/MindBot#readme",
   "description": "",
   "dependencies": {
-    "concurrently": "^9.2.1"
+    "concurrently": "^9.2.1",
+    "openai": "^7.21.0"
   }
 }
