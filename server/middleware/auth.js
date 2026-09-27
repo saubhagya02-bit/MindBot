@@ -48,30 +48,13 @@ export const protect = async (req, res, next) => {
 
 export const optionalAuth = async (req, res, next) => {
   try {
-    const authHeader = req.headers.authorization;
-
-    if (!authHeader || !authHeader.startsWith("Bearer ")) {
-      req.user = null;
-      return next();
+    const token = extractToken(req);
+    if (token) {
+      const user = await resolveUser(token);
+      if (user) req.user = user;
     }
-
-    const token = authHeader.split(" ")[1];
-
-    const decoded = jwt.verify(token, process.env.JWT_SECRET);
-
-    const user = await User.findById(decoded.id).select("-password");
-
-    if (!user) {
-      req.user = null;
-      return next();
-    }
-
-    req.user = user;
-    next();
-  } catch (error) {
-    req.user = null;
-    next();
-  }
+  } catch {}
+  next();
 };
 
 export const generateToken = (userId) =>
@@ -82,7 +65,9 @@ export const generateToken = (userId) =>
 export const sendTokenCookie = (res, token) => {
   res.cookie("token", token, {
     httpOnly: true,
-    secure: process.env.NODE_ENV === "production",
+    secure: process.env.COOKIE_SECURE
+      ? process.env.COOKIE_SECURE === "true"
+      : process.env.NODE_ENV === "production",
     sameSite: "strict",
     maxAge: 30 * 24 * 60 * 60 * 1000,
   });

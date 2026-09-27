@@ -8,6 +8,8 @@ import {
 } from "lucide-react";
 import { useChat } from "../context/ChatContext.jsx";
 
+import DocumentUpload from "./DocumentUpload.jsx";
+
 const suggestions = [
   {
     icon: <Code2 size={18} />,
@@ -116,6 +118,10 @@ export default function WelcomeScreen() {
             </div>
           </button>
         ))}
+      </div>
+
+      <div className="w-full max-w-lg mt-8">
+        <DocumentUpload />
       </div>
     </div>
   );
