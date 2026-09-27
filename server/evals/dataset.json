@@ -1,0 +1,42 @@
+[
+  {
+    "question": "What is the capital of France?",
+    "expectedAnswer": "Paris is the capital of France."
+  },
+  {
+    "question": "Explain what a REST API is in one paragraph.",
+    "expectedAnswer": "A REST API is a web API that follows REST principles: stateless requests, resources identified by URLs, and standard HTTP methods (GET, POST, PUT, DELETE) to operate on them, typically exchanging JSON."
+  },
+  {
+    "question": "What does HTTP status code 404 mean?",
+    "expectedAnswer": "404 means Not Found — the server could not find the requested resource."
+  },
+  {
+    "question": "Write a one-sentence definition of recursion.",
+    "expectedAnswer": "Recursion is when a function calls itself, usually to break a problem into smaller instances of the same problem, with a base case that stops the recursion."
+  },
+  {
+    "question": "What is the difference between let and const in JavaScript?",
+    "expectedAnswer": "let declares a variable that can be reassigned; const declares a variable that cannot be reassigned after its initial value (though objects/arrays assigned with const can still be mutated)."
+  },
+  {
+    "question": "What does CRUD stand for?",
+    "expectedAnswer": "Create, Read, Update, Delete — the four basic operations of persistent storage."
+  },
+  {
+    "question": "What is the purpose of a database index?",
+    "expectedAnswer": "An index speeds up lookups on a column by maintaining an ordered data structure, at the cost of extra storage and slower writes."
+  },
+  {
+    "question": "Briefly explain what Docker is used for.",
+    "expectedAnswer": "Docker packages an application and its dependencies into a container so it runs consistently across different environments."
+  },
+  {
+    "question": "What is the time complexity of binary search?",
+    "expectedAnswer": "O(log n), because each step halves the remaining search space."
+  },
+  {
+    "question": "What is JWT used for in web authentication?",
+    "expectedAnswer": "JWT (JSON Web Token) is a compact, signed token used to represent a user's identity/claims, commonly sent with requests so a server can verify who the user is without a server-side session lookup."
+  }
+]
