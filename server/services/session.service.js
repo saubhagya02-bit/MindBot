@@ -51,6 +51,10 @@ export async function getSessionById(sessionId, userId) {
       role: m.role,
       content: m.content,
       edited: m.edited,
+      attachments: (m.attachments || []).map((a) => ({
+        documentId: a.documentId.toString(),
+        filename: a.filename,
+      })),
       timestamp: m.timestamp,
     })),
     messageCount: session.messageCount,
@@ -80,8 +84,17 @@ export async function deleteSession(sessionId, userId) {
   return true;
 }
 
-// Add messages to a session and save
-export async function appendMessages(sessionId, userId, messages) {
+// Add messages to a session and save. `documentIds` are files attached in this
+// exchange; they're remembered on the session so later questions can use them.
+// `truncateFromMessageId` is used when a user edits an earlier message: that
+// message and everything after it is removed before the new messages are added.
+export async function appendMessages(
+  sessionId,
+  userId,
+  messages,
+  documentIds = [],
+  { truncateFromMessageId } = {},
+) {
   const session = await Session.findOne({ _id: sessionId, userId });
   if (!session) {
     throw new AppError(
@@ -90,7 +103,29 @@ export async function appendMessages(sessionId, userId, messages) {
       ERROR_CODES.SESSION_NOT_FOUND,
     );
   }
+
+  if (truncateFromMessageId) {
+    const index = session.messages.findIndex(
+      (m) => String(m._id) === truncateFromMessageId.toLowerCase(),
+    );
+    if (index === -1) {
+      throw new AppError(
+        "The message you tried to edit no longer exists. Refresh and try again.",
+        404,
+        ERROR_CODES.SESSION_NOT_FOUND,
+      );
+    }
+    session.messages.splice(index);
+  }
+
   session.messages.push(...messages);
+
+  for (const id of documentIds) {
+    if (!session.documentIds.some((existing) => existing.equals(id))) {
+      session.documentIds.push(id);
+    }
+  }
+
   await session.save();
   await cacheDel(`sessions:${userId}`);
   return session;
