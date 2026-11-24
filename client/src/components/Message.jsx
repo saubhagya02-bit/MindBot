@@ -14,6 +14,7 @@ import { Prism as SyntaxHighlighter } from "react-syntax-highlighter";
 import { vscDarkPlus } from "react-syntax-highlighter/dist/esm/styles/prism";
 import { useAuth } from "../context/AuthContext.jsx";
 import { useChat } from "../context/ChatContext.jsx";
+import AttachmentChip from "./AttachmentChip.jsx";
 
 function CopyButton({ text, small = false }) {
   const [copied, setCopied] = useState(false);
@@ -84,222 +85,324 @@ function CodeBlock({ language, children }) {
   );
 }
 
-// User message bubble with inline edit
+const MAX_EDIT_LENGTH = 4000;
+
+const KBD_STYLE = {
+  background: "var(--bg-700)",
+  border: "1px solid var(--border2)",
+  padding: "1px 5px",
+  borderRadius: "4px",
+  fontFamily: "monospace",
+  fontSize: "10px",
+};
+
+// User message bubble with inline editing (ChatGPT / Claude style):
+// hover to reveal Copy + Edit; editing opens a full-width editor, and saving
+// replaces this message and every reply after it.
+
 function UserBubble({ message }) {
   const { editAndResend, isStreaming } = useChat();
   const { user, setShowAccountSettings, setShowAuthPrompt } = useAuth();
+
   const [editing, setEditing] = useState(false);
   const [editText, setEditText] = useState(message.content);
-  const [showActions, setShowActions] = useState(false);
   const textareaRef = useRef(null);
 
-  // Auto-focus + resize textarea when editing starts
-  useEffect(() => {
-    if (editing && textareaRef.current) {
-      const ta = textareaRef.current;
-      ta.focus();
-      ta.style.height = "auto";
-      ta.style.height = ta.scrollHeight + "px";
+  const trimmed = editText.trim();
+  const unchanged = trimmed === message.content.trim();
+  const tooLong = editText.length > MAX_EDIT_LENGTH;
 
-      ta.selectionStart = ta.value.length;
-      ta.selectionEnd = ta.value.length;
-    }
+  const canSave = Boolean(trimmed) && !unchanged && !tooLong && !isStreaming;
+
+  const autosize = (ta) => {
+    if (!ta) return;
+    ta.style.height = "auto";
+    ta.style.height = `${Math.min(ta.scrollHeight, 300)}px`;
+  };
+
+  useEffect(() => {
+    if (!editing || !textareaRef.current) return;
+
+    const ta = textareaRef.current;
+    ta.focus();
+    autosize(ta);
+    ta.setSelectionRange(ta.value.length, ta.value.length);
   }, [editing]);
 
-  const handleSendEdit = () => {
-    if (!editText.trim() || isStreaming) return;
-    if (editText.trim() === message.content) {
-      // No change — just close editor
-      setEditing(false);
-      return;
-    }
+  const startEditing = () => {
+    setEditText(message.content);
+    setEditing(true);
+  };
 
-    editAndResend(message.id, editText.trim());
+  const cancel = () => {
+    setEditText(message.content);
     setEditing(false);
   };
 
-  const handleCancel = () => {
+  const save = () => {
+    if (!canSave) return;
+
     setEditing(false);
-    setEditText(message.content);
+    editAndResend(message.id, trimmed);
   };
 
   const handleKey = (e) => {
+    if (e.nativeEvent.isComposing) return;
+
     if (e.key === "Enter" && !e.shiftKey) {
       e.preventDefault();
-      handleSendEdit();
+      save();
     }
-    if (e.key === "Escape") handleCancel();
-  };
 
-  const handleTextareaChange = (e) => {
-    setEditText(e.target.value);
-    e.target.style.height = "auto";
-    e.target.style.height = e.target.scrollHeight + "px";
+    if (e.key === "Escape") {
+      e.preventDefault();
+      cancel();
+    }
   };
 
   return (
-    <div
-      className="flex gap-3 message-appear flex-row-reverse"
-      onMouseEnter={() => setShowActions(true)}
-      onMouseLeave={() => {
-        if (!editing) setShowActions(false);
-      }}
-    >
-      {/* Avatar */}
+    <div className="group flex gap-3 message-appear flex-row-reverse">
+      {/* User Avatar */}
       <button
         onClick={() =>
           user ? setShowAccountSettings(true) : setShowAuthPrompt(true)
         }
-        className="w-7 h-7 rounded-lg border flex items-center justify-center transition-all hover:scale-110 flex-shrink-0 mt-1"
+        aria-label="User account"
+        className="w-8 h-8 rounded-xl border flex items-center justify-center
+        flex-shrink-0 mt-1 transition-transform hover:scale-105"
         style={{
           background: "var(--bg-700)",
           borderColor: "var(--accent,#4f8ef7)66",
         }}
-        title={user ? "Account settings" : "Sign in"}
       >
         {user ? (
           <span
-            style={{
-              fontSize: "11px",
-              fontWeight: 700,
-              color: "var(--accent,#4f8ef7)",
-            }}
+            className="text-xs font-bold"
+            style={{ color: "var(--accent,#4f8ef7)" }}
           >
             {user.name?.charAt(0)?.toUpperCase()}
           </span>
         ) : (
-          <User size={13} style={{ color: "var(--accent,#4f8ef7)" }} />
+          <User size={14} style={{ color: "var(--accent,#4f8ef7)" }} />
         )}
       </button>
 
-      <div className="flex flex-col items-end max-w-[85%]">
-        {/* Editing mode */}
-        {editing ? (
-          <div
-            className="w-full rounded-2xl rounded-tr-sm border overflow-hidden"
-            style={{
-              background: "var(--bg-800)",
-              borderColor: "var(--accent,#4f8ef7)80",
-              minWidth: "260px",
-            }}
-          >
-            <textarea
-              ref={textareaRef}
-              value={editText}
-              onChange={handleTextareaChange}
-              onKeyDown={handleKey}
-              className="w-full bg-transparent text-sm px-4 pt-3 pb-1 outline-none resize-none leading-relaxed"
-              style={{
-                color: "var(--text)",
-                minHeight: "44px",
-                maxHeight: "200px",
-                overflowY: "auto",
-              }}
-            />
-            {/* Edit action buttons */}
-            <div className="flex items-center justify-between px-3 pb-2.5 pt-1">
-              <span
-                className="text-[11px]"
-                style={{ color: "var(--text-muted)" }}
-              >
-                <kbd
-                  style={{
-                    background: "var(--bg-700)",
-                    border: "1px solid var(--border2)",
-                    padding: "1px 4px",
-                    borderRadius: "3px",
-                    fontFamily: "monospace",
-                    fontSize: "10px",
-                  }}
-                >
-                  Enter
-                </kbd>{" "}
-                send &nbsp;·&nbsp;
-                <kbd
-                  style={{
-                    background: "var(--bg-700)",
-                    border: "1px solid var(--border2)",
-                    padding: "1px 4px",
-                    borderRadius: "3px",
-                    fontFamily: "monospace",
-                    fontSize: "10px",
-                  }}
-                >
-                  Esc
-                </kbd>{" "}
-                cancel
-              </span>
-              <div className="flex items-center gap-2">
-                <button
-                  onClick={handleCancel}
-                  className="flex items-center gap-1 text-xs px-2.5 py-1 rounded-lg border transition-all"
-                  style={{
-                    color: "var(--text-muted)",
-                    borderColor: "var(--border2)",
-                    background: "transparent",
-                  }}
-                >
-                  <X size={11} /> Cancel
-                </button>
-                <button
-                  onClick={handleSendEdit}
-                  disabled={!editText.trim() || isStreaming}
-                  className="flex items-center gap-1 text-xs px-2.5 py-1 rounded-lg text-white transition-all disabled:opacity-50"
-                  style={{ background: "var(--accent,#4f8ef7)" }}
-                >
-                  <CornerDownRight size={11} /> Send
-                </button>
-              </div>
-            </div>
-          </div>
-        ) : (
-          /* Normal bubble */
-          <div
-            className="relative rounded-2xl rounded-tr-sm px-4 py-3 text-sm leading-relaxed border"
-            style={{
-              background: "var(--accent,#4f8ef7)22",
-              borderColor: "var(--accent,#4f8ef7)55",
-              color: "var(--text)",
-            }}
-          >
-            <p className="whitespace-pre-wrap" style={{ color: "var(--text)" }}>
-              {message.content}
-            </p>
-            {/* Edited badge */}
-            {message.edited && (
-              <span
-                className="text-[10px] mt-1 block"
-                style={{ color: "var(--text-muted)" }}
-              >
-                edited
-              </span>
-            )}
+      <div
+        className={`flex flex-col items-end min-w-0 ${
+          editing ? "w-full max-w-[760px]" : "max-w-[85%]"
+        }`}
+      >
+        {/* Attachments */}
+        {message.attachments?.length > 0 && (
+          <div className="flex flex-wrap justify-end gap-2 mb-2">
+            {message.attachments.map((a) => (
+              <AttachmentChip key={a.documentId} name={a.filename} />
+            ))}
           </div>
         )}
 
-        {/* Hover action buttons — copy + edit */}
-        {!editing && (
-          <div
-            className={`flex items-center gap-1 mt-1 transition-opacity duration-150 ${showActions ? "opacity-100" : "opacity-0"}`}
-          >
-            <CopyButton text={message.content} small />
-            <button
-              onClick={() => {
-                setEditing(true);
-                setEditText(message.content);
-                setShowActions(false);
-              }}
-              disabled={isStreaming}
-              className="flex items-center gap-1 rounded transition-colors disabled:opacity-40"
+        {editing ? (
+          /* Professional Edit Interface */
+          <div className="w-full animate-in fade-in slide-in-from-bottom-1 duration-200">
+            <div
+              className="w-full rounded-2xl border overflow-hidden transition-all duration-200"
               style={{
-                fontSize: "11px",
-                padding: "2px 6px",
-                color: "var(--text-muted)",
+                background: "var(--bg-800)",
+                borderColor: "var(--accent,#4f8ef7)",
+                boxShadow: "0 0 0 3px var(--accent,#4f8ef7)18",
               }}
             >
-              <Edit2 size={11} /> Edit
-            </button>
+              {/* Editor Header */}
+              <div
+                className="flex items-center justify-between px-4 py-3 border-b"
+                style={{
+                  borderColor: "var(--border)",
+                  background: "var(--bg-700)",
+                }}
+              >
+                <div className="flex items-center gap-2">
+                  <Edit2 size={14} style={{ color: "var(--accent,#4f8ef7)" }} />
+
+                  <span
+                    className="text-xs font-semibold"
+                    style={{ color: "var(--text)" }}
+                  >
+                    Edit message
+                  </span>
+                </div>
+
+                <button
+                  onClick={cancel}
+                  aria-label="Close editor"
+                  className="p-1 rounded-md hover:bg-white/5 transition-colors"
+                  title="Cancel editing"
+                >
+                  <X size={15} style={{ color: "var(--text-muted)" }} />
+                </button>
+              </div>
+
+              {/* Textarea */}
+              <div className="px-4 pt-3 pb-2">
+                <textarea
+                  ref={textareaRef}
+                  value={editText}
+                  onChange={(e) => {
+                    setEditText(e.target.value);
+                    autosize(e.target);
+                  }}
+                  onKeyDown={handleKey}
+                  aria-label="Edit message"
+                  placeholder="Edit your message..."
+                  rows={1}
+                  maxLength={MAX_EDIT_LENGTH + 1}
+                  className="w-full bg-transparent text-sm leading-relaxed
+                  outline-none resize-none border-0 focus:ring-0"
+                  style={{
+                    color: "var(--text)",
+                    minHeight: "65px",
+                    maxHeight: "300px",
+                    overflowY: "auto",
+                    caretColor: "var(--accent,#4f8ef7)",
+                  }}
+                />
+              </div>
+
+              {/* Editor Footer */}
+              <div
+                className="flex flex-wrap items-center justify-between gap-3 px-4 py-3 border-t"
+                style={{
+                  borderColor: "var(--border)",
+                }}
+              >
+                {/* Character Counter */}
+                <div className="flex flex-col gap-1">
+                  <span
+                    className="text-[11px]"
+                    style={{
+                      color: tooLong ? "#ef4444" : "var(--text-muted)",
+                    }}
+                  >
+                    {editText.length.toLocaleString()} / {MAX_EDIT_LENGTH}
+                  </span>
+
+                  {tooLong && (
+                    <span className="text-[10px] text-red-400">
+                      Message exceeds the character limit.
+                    </span>
+                  )}
+                </div>
+
+                {/* Action Buttons */}
+                <div className="flex items-center gap-2">
+                  <button
+                    onClick={cancel}
+                    className="px-3.5 py-2 rounded-lg text-xs font-medium
+                    border transition-all hover:bg-white/5 active:scale-95"
+                    style={{
+                      color: "var(--text-muted)",
+                      borderColor: "var(--border2)",
+                      background: "transparent",
+                    }}
+                  >
+                    Cancel
+                  </button>
+
+                  <button
+                    onClick={save}
+                    disabled={!canSave}
+                    title={
+                      unchanged
+                        ? "Make a change before submitting"
+                        : "Save changes and regenerate the response"
+                    }
+                    className="flex items-center gap-2 px-4 py-2
+                    rounded-lg text-xs font-semibold text-white
+                    transition-all hover:brightness-110 active:scale-95
+                    disabled:opacity-40 disabled:cursor-not-allowed"
+                    style={{
+                      background: "var(--accent,#4f8ef7)",
+                    }}
+                  >
+                    <CornerDownRight size={14} />
+                    Save & Submit
+                  </button>
+                </div>
+              </div>
+            </div>
+
+            {/* Keyboard Shortcuts */}
+            <div
+              className="flex flex-wrap items-center justify-end gap-x-3 gap-y-1 mt-2 px-1"
+              style={{ color: "var(--text-muted)" }}
+            >
+              <span className="text-[10px]">
+                <kbd style={KBD_STYLE}>Enter</kbd> Submit
+              </span>
+
+              <span className="text-[10px]">
+                <kbd style={KBD_STYLE}>Shift + Enter</kbd> New line
+              </span>
+
+              <span className="text-[10px]">
+                <kbd style={KBD_STYLE}>Esc</kbd> Cancel
+              </span>
+            </div>
           </div>
+        ) : (
+          <>
+            {/* Normal User Message */}
+            <div
+              className="rounded-2xl rounded-tr-sm px-4 py-3 text-sm
+              leading-relaxed border transition-colors"
+              style={{
+                background: "var(--accent,#4f8ef7)18",
+                borderColor: "var(--accent,#4f8ef7)40",
+                color: "var(--text)",
+              }}
+            >
+              <p className="whitespace-pre-wrap break-words">
+                {message.content}
+              </p>
+            </div>
+
+            {/* Message Actions */}
+            <div
+              className="flex items-center gap-2 mt-1.5 px-1
+              opacity-0 group-hover:opacity-100 focus-within:opacity-100
+              transition-opacity duration-200"
+            >
+              {message.edited && (
+                <span
+                  className="text-[10px]"
+                  style={{ color: "var(--text-muted)" }}
+                >
+                  Edited
+                </span>
+              )}
+
+              <CopyButton text={message.content} small />
+
+              {user && (
+                <button
+                  onClick={startEditing}
+                  disabled={isStreaming}
+                  aria-label="Edit message"
+                  title={
+                    isStreaming
+                      ? "Wait for the response to finish"
+                      : "Edit message"
+                  }
+                  className="flex items-center gap-1.5 px-2 py-1
+                  rounded-md text-[11px] transition-all
+                  hover:bg-white/5 disabled:opacity-40"
+                  style={{ color: "var(--text-muted)" }}
+                >
+                  <Edit2 size={12} />
+                  Edit
+                </button>
+              )}
+            </div>
+          </>
         )}
       </div>
     </div>
