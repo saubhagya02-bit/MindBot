@@ -11,6 +11,7 @@ import {
   buildMemoryBlock,
   captureMemoriesAsync,
 } from "../services/memory.service.js";
+import Document from "../models/Document.js";
 import { AppError, ERROR_CODES } from "../utils/AppError.js";
 
 const router = express.Router();
@@ -35,28 +36,73 @@ router.post(
   limitByUserType,
   validate(chatSchema),
   async (req, res, next) => {
-    console.log(
-      "chat request — has user:",
-      Boolean(req.user),
-      req.user?._id?.toString(),
-    );
     try {
-      const { message, sessionId } = req.body;
+      const { message, sessionId, documentIds, editFromMessageId } = req.body;
       const userId = req.user?._id;
 
+      // Only logged-in users get a persisted session, history, files and memory
       let session = null;
       let history = [];
       let context = "";
+      let attachments = [];
 
       if (userId) {
         session = await resolveSession(sessionId, userId, message);
-        history = session.messages.map(({ role, content }) => ({
-          role,
-          content,
-        }));
 
+        // Editing: the conversation up to (not including) the edited message
+        // is the history, and the edited message keeps its attached files.
+        let baseMessages = session.messages;
+        if (editFromMessageId) {
+          const editIndex = session.messages.findIndex(
+            (m) => String(m._id) === editFromMessageId.toLowerCase(),
+          );
+          const target = session.messages[editIndex];
+
+          if (editIndex === -1 || target.role !== "user") {
+            throw new AppError(
+              "The message you tried to edit no longer exists. Refresh and try again.",
+              404,
+              ERROR_CODES.SESSION_NOT_FOUND,
+            );
+          }
+
+          baseMessages = session.messages.slice(0, editIndex);
+          attachments = (target.attachments || []).map((a) => ({
+            documentId: a.documentId,
+            filename: a.filename,
+          }));
+        }
+
+        history = baseMessages.map(({ role, content }) => ({ role, content }));
+
+        // New attachments: only accept files that belong to this user and
+        // finished processing
+        if (!editFromMessageId && documentIds?.length) {
+          const docs = await Document.find({
+            _id: { $in: documentIds },
+            userId,
+            status: "ready",
+          })
+            .select("filename")
+            .lean();
+          attachments = docs.map((d) => ({
+            documentId: d._id,
+            filename: d.filename,
+          }));
+        }
+
+        // Files attached earlier in this conversation stay in scope
+        const scopeIds = [
+          ...new Set([
+            ...session.documentIds.map(String),
+            ...attachments.map((a) => String(a.documentId)),
+          ]),
+        ];
+
+        // File + memory retrieval run in parallel; neither ever throws — both
+        // fail soft to an empty result so a reply is never blocked by them.
         const [chunks, memories] = await Promise.all([
-          retrieveContext(userId, message),
+          retrieveContext(userId, message, { documentIds: scopeIds }),
           retrieveMemories(userId, message),
         ]);
 
@@ -81,11 +127,34 @@ router.post(
         );
       }
 
+      let messageIds;
+      let messageCount;
+
       if (session) {
-        await appendMessages(session._id, userId, [
-          { role: "user", content: message },
-          { role: "assistant", content: reply.text },
-        ]);
+        // The old messages are only removed now, after a successful reply, so
+        // a failed edit never destroys the conversation.
+        const saved = await appendMessages(
+          session._id,
+          userId,
+          [
+            {
+              role: "user",
+              content: message,
+              attachments,
+              edited: Boolean(editFromMessageId),
+            },
+            { role: "assistant", content: reply.text },
+          ],
+          attachments.map((a) => a.documentId),
+          { truncateFromMessageId: editFromMessageId },
+        );
+
+        const count = saved.messages.length;
+        messageIds = {
+          user: String(saved.messages[count - 2]._id),
+          assistant: String(saved.messages[count - 1]._id),
+        };
+        messageCount = saved.messageCount;
 
         await recordUsage({
           userId,
@@ -96,6 +165,7 @@ router.post(
           latencyMs: reply.latencyMs,
         });
 
+        // Fire-and-forget: never awaited, never blocks the response
         captureMemoriesAsync(userId, message, reply.text);
       }
 
@@ -107,6 +177,8 @@ router.post(
           title: session?.title,
           model: reply.model,
           provider: reply.provider,
+          messageIds,
+          messageCount,
         },
       });
     } catch (err) {
