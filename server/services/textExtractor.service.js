@@ -1,14 +1,29 @@
-import { createRequire } from "module";
+import { PDFParse } from "pdf-parse";
 import mammoth from "mammoth";
 import { AppError, ERROR_CODES } from "../utils/AppError.js";
 
-const require = createRequire(import.meta.url);
-const pdfParse = require("pdf-parse");
+// pdf-parse 2.x exports a PDFParse class (1.x exported a function). Pin the
+// major version in package.json so an upgrade can't silently change this.
+async function extractPdfText(buffer) {
+  const parser = new PDFParse({ data: new Uint8Array(buffer) });
+  try {
+    const result = await parser.getText();
+    // pdf-parse 2.x appends page markers like "-- 1 of 3 --"; drop them
+    return result.text.replace(/\n*-- \d+ of \d+ --\n*/g, "\n").trim();
+  } catch (err) {
+    throw new AppError(
+      "Could not read this PDF. It may be corrupted or password-protected.",
+      400,
+      ERROR_CODES.VALIDATION_ERROR,
+    );
+  } finally {
+    await parser.destroy().catch(() => {});
+  }
+}
 
 export async function extractText(buffer, mimeType) {
   if (mimeType === "application/pdf") {
-    const data = await pdfParse(buffer);
-    return data.text;
+    return extractPdfText(buffer);
   }
 
   if (
