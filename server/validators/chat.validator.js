@@ -28,18 +28,31 @@ export const validate = (schema) => (req, res, next) => {
 };
 
 export const chatSchema = z.object({
-  // Accept any non-empty string, trim whitespace
+  // trim first so a whitespace-only message fails the min(1) check
   message: z
     .string({ required_error: "Message is required" })
+    .trim()
     .min(1, "Message cannot be empty")
-    .max(10000, "Message too long")
-    .trim(),
+    .max(10000, "Message too long"),
 
   sessionId: z
     .string()
     .optional()
     .nullable()
     .transform((val) => (!val || val.startsWith("temp-") ? undefined : val)),
+
+  // Files attached to this message (uploaded beforehand via /api/documents/upload)
+  documentIds: z
+    .array(z.string().regex(/^[a-f\d]{24}$/i, "Invalid document id"))
+    .max(5, "You can attach up to 5 files")
+    .optional(),
+
+  // Set when the user edits an earlier message: that message and everything
+  // after it is replaced by this new message and the reply to it.
+  editFromMessageId: z
+    .string()
+    .regex(/^[a-f\d]{24}$/i, "Invalid message id")
+    .optional(),
 });
 
 export const sessionTitleSchema = z.object({
