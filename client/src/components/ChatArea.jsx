@@ -1,4 +1,4 @@
-import { useEffect, useRef } from "react";
+import { useEffect, useRef, useState } from "react";
 import {
   PanelLeftOpen,
   PanelLeftClose,
@@ -6,12 +6,17 @@ import {
   AlertCircle,
   X,
   LogIn,
+  Paperclip,
 } from "lucide-react";
 import { useChat } from "../context/ChatContext.jsx";
 import { useAuth } from "../context/AuthContext.jsx";
+import { useAttachments } from "../hooks/useAttachments.js";
 import MessageList from "./MessageList.jsx";
 import ChatInput from "./ChatInput.jsx";
 import WelcomeScreen from "./WelcomeScreen.jsx";
+
+const hasFiles = (e) =>
+  Array.from(e.dataTransfer?.types || []).includes("Files");
 
 export default function ChatArea() {
   const {
@@ -27,7 +32,38 @@ export default function ChatArea() {
     createSession,
   } = useChat();
   const { user, setShowAccountSettings, openAuthPrompt } = useAuth();
+  const attachments = useAttachments();
   const bottomRef = useRef(null);
+
+  // Drag & drop anywhere on the chat area
+  const [dragging, setDragging] = useState(false);
+  const dragDepth = useRef(0);
+
+  const handleDragEnter = (e) => {
+    if (!hasFiles(e)) return;
+    e.preventDefault();
+    dragDepth.current += 1;
+    setDragging(true);
+  };
+
+  const handleDragOver = (e) => {
+    if (hasFiles(e)) e.preventDefault();
+  };
+
+  const handleDragLeave = () => {
+    dragDepth.current = Math.max(0, dragDepth.current - 1);
+    if (dragDepth.current === 0) setDragging(false);
+  };
+
+  const handleDrop = (e) => {
+    if (!hasFiles(e)) return;
+    e.preventDefault();
+    dragDepth.current = 0;
+    setDragging(false);
+
+    if (!user) return openAuthPrompt("login");
+    attachments.addFiles(e.dataTransfer.files);
+  };
 
   useEffect(() => {
     bottomRef.current?.scrollIntoView({ behavior: "smooth" });
@@ -38,9 +74,38 @@ export default function ChatArea() {
 
   return (
     <div
-      className="flex flex-col h-full transition-colors duration-200"
+      className="relative flex flex-col h-full transition-colors duration-200"
       style={{ background: "var(--bg-950)" }}
+      onDragEnter={handleDragEnter}
+      onDragOver={handleDragOver}
+      onDragLeave={handleDragLeave}
+      onDrop={handleDrop}
     >
+      {/* Drop overlay */}
+      {dragging && (
+        <div
+          className="absolute inset-0 z-40 flex items-center justify-center pointer-events-none"
+          style={{
+            background: "rgba(7,8,16,0.78)",
+            backdropFilter: "blur(4px)",
+          }}
+        >
+          <div
+            className="flex flex-col items-center gap-2 px-10 py-8 rounded-2xl border-2 border-dashed"
+            style={{
+              borderColor: "var(--accent,#4f8ef7)",
+              color: "var(--text)",
+            }}
+          >
+            <Paperclip size={26} style={{ color: "var(--accent,#4f8ef7)" }} />
+            <div className="text-sm font-medium">Drop files to attach</div>
+            <div className="text-xs" style={{ color: "var(--text-muted)" }}>
+              PDF, DOCX or TXT · up to 10MB each
+            </div>
+          </div>
+        </div>
+      )}
+
       {/* Topbar */}
       <header
         className="flex items-center justify-between px-4 py-3 border-b flex-shrink-0"
@@ -166,7 +231,7 @@ export default function ChatArea() {
 
       {/* Input */}
       <div className="flex-shrink-0 px-4 pb-5 pt-3">
-        <ChatInput />
+        <ChatInput attachments={attachments} />
       </div>
     </div>
   );
