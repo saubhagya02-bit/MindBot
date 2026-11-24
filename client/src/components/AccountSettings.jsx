@@ -9,6 +9,7 @@ import {
   Sun,
   Moon,
   Monitor,
+  LogOut,
 } from "lucide-react";
 import { useAuth } from "../context/AuthContext.jsx";
 
@@ -237,12 +238,23 @@ export default function AccountSettings() {
               );
             })}
             <div className="mx-3 my-2 border-t border-white/8" />
+
             <button
               onClick={logout}
-              className="w-full flex items-center gap-2.5 px-4 py-2.5 text-[13px] text-red-400 hover:bg-red-500/10 transition-all"
+              title="Sign out"
+              aria-label="Sign out"
+              className="w-full flex items-center gap-2.5 px-4 py-2.5
+  text-[13px] font-medium text-red-400
+  hover:bg-red-500/10 hover:text-red-300
+  transition-all duration-200 rounded-lg group"
             >
-              <X size={14} />
-              Sign out
+              <LogOut
+                size={15}
+                strokeWidth={1.8}
+                className="transition-transform duration-200
+    group-hover:translate-x-0.5"
+              />
+              <span>Sign out</span>
             </button>
           </div>
 
